@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements_backend.txt .
+
+RUN pip install --upgrade pip && \
+    pip install -r requirements_backend.txt
+
+COPY . .
+
+RUN mkdir -p logs saved_analyses staticfiles
+
+RUN python manage.py collectstatic --noinput || true
+
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "dermacare.wsgi:application"]
