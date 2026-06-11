@@ -6,7 +6,7 @@ from pathlib import Path
 from .models import BrandPortfolio, Product, Ingredient, AnalysisTask
 import google.generativeai as genai
 from django.conf import settings
-import base64
+
 
 @shared_task(bind=True)
 def analyze_portfolio_task(self, portfolio_id, pdf_path, lookup_ingredients=True):
@@ -70,42 +70,44 @@ def analyze_portfolio_task(self, portfolio_id, pdf_path, lookup_ingredients=True
         raise
 
 def extract_products_from_document(pdf_path, portfolio):
-    """Extract products from PDF using Gemini - WITHOUT upload_file"""
-    import base64
+    """Extract products from PDF using Gemini File API"""
+    import time
     genai.configure(api_key=settings.GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-2.5-flash')
     
-    # Read PDF as binary
-    with open(pdf_path, 'rb') as f:
-        pdf_content = f.read()
-    
-    # Convert to base64
-    pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
-    
-    prompt = """
-    Extract ALL products from this PDF document.
-    For each product, provide:
-    1. Product name
-    2. Description (2-3 sentences)
-    3. Category (skincare, makeup, etc)
-    4. Benefits (comma-separated)
-    5. How to use (brief)
-    
-    Return ONLY as JSON array with fields: name, description, category, benefits, how_to_use, ingredients
-    
-    Example: [{"name":"Product A","description":"...","category":"...","benefits":"...","how_to_use":"...","ingredients":"..."}]
-    """
-    
     try:
-        # Send PDF as base64-encoded content
-        response = model.generate_content([
-            prompt,
-            {"mime_type": "application/pdf", "data": pdf_base64}
-        ])
+        # Upload file to Gemini (same as original approach)
+        print(f"📤 Uploading PDF to Gemini: {pdf_path}")
+        myfile = genai.upload_file(pdf_path, mime_type="application/pdf")
         
-        print(f"✅ Gemini Response: {response.text[:200]}")  # DEBUG
+        # Wait for processing
+        print(f"⏳ Waiting for Gemini to process...")
+        while myfile.state.name == "PROCESSING":
+            time.sleep(2)
         
-        # Parse JSON from response
+        myfile = genai.get_file(myfile.name)
+        print(f"✅ File ready: {myfile.state.name}")
+        
+        prompt = """
+        Extract ALL products from this PDF document.
+        For each product, provide:
+        1. Product name
+        2. Description (2-3 sentences)
+        3. Category (skincare, makeup, etc)
+        4. Benefits (comma-separated)
+        5. How to use (brief)
+        
+        Return ONLY as JSON array with fields: name, description, category, benefits, how_to_use, ingredients
+        
+        Example: [{"name":"Product A","description":"...","category":"...","benefits":"...","how_to_use":"...","ingredients":"..."}]
+        """
+        
+        # Use file reference (not inline)
+        response = model.generate_content([prompt, myfile])
+        
+        print(f"✅ Gemini Response: {response.text[:200]}")
+        
+        # Parse JSON
         response_text = response.text.strip()
         if response_text.startswith('```json'):
             response_text = response_text.split('```json')[1].split('```')[0].strip()
@@ -113,19 +115,18 @@ def extract_products_from_document(pdf_path, portfolio):
             response_text = response_text.split('```')[1].split('```')[0].strip()
         
         products = json.loads(response_text)
-        print(f"✅ Parsed {len(products) if isinstance(products, list) else 0} products")  # DEBUG
         
         if not isinstance(products, list):
             products = []
         
     except Exception as e:
-        print(f"❌ Error in extraction: {str(e)}")  # DEBUG
+        print(f"❌ Error: {str(e)}")
         import traceback
-        traceback.print_exc()  # DEBUG - full error
+        traceback.print_exc()
         products = []
     
     # Create Product objects
-    print(f"📦 Creating {len(products)} products in database...")  # DEBUG
+    print(f"📦 Creating {len(products)} products in database...")
     for prod in products:
         Product.objects.create(
             portfolio=portfolio,
