@@ -6,6 +6,7 @@ from pathlib import Path
 from .models import BrandPortfolio, Product, Ingredient, AnalysisTask
 import google.generativeai as genai
 from django.conf import settings
+import base64
 
 @shared_task(bind=True)
 def analyze_portfolio_task(self, portfolio_id, pdf_path, lookup_ingredients=True):
@@ -70,12 +71,16 @@ def analyze_portfolio_task(self, portfolio_id, pdf_path, lookup_ingredients=True
 
 def extract_products_from_document(pdf_path, portfolio):
     """Extract products from PDF using Gemini - WITHOUT upload_file"""
+    import base64
     genai.configure(api_key=settings.GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-2.5-flash')
     
     # Read PDF as binary
     with open(pdf_path, 'rb') as f:
         pdf_content = f.read()
+    
+    # Convert to base64
+    pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
     
     prompt = """
     Extract ALL products from this PDF document.
@@ -92,11 +97,13 @@ def extract_products_from_document(pdf_path, portfolio):
     """
     
     try:
-        # Send PDF as binary content
+        # Send PDF as base64-encoded content
         response = model.generate_content([
             prompt,
-            {"mime_type": "application/pdf", "data": pdf_content}
+            {"mime_type": "application/pdf", "data": pdf_base64}
         ])
+        
+        print(f"✅ Gemini Response: {response.text[:200]}")  # DEBUG
         
         # Parse JSON from response
         response_text = response.text.strip()
@@ -106,15 +113,19 @@ def extract_products_from_document(pdf_path, portfolio):
             response_text = response_text.split('```')[1].split('```')[0].strip()
         
         products = json.loads(response_text)
+        print(f"✅ Parsed {len(products) if isinstance(products, list) else 0} products")  # DEBUG
         
         if not isinstance(products, list):
             products = []
         
     except Exception as e:
-        print(f"Error parsing Gemini response: {e}")
+        print(f"❌ Error in extraction: {str(e)}")  # DEBUG
+        import traceback
+        traceback.print_exc()  # DEBUG - full error
         products = []
     
     # Create Product objects
+    print(f"📦 Creating {len(products)} products in database...")  # DEBUG
     for prod in products:
         Product.objects.create(
             portfolio=portfolio,
@@ -127,6 +138,7 @@ def extract_products_from_document(pdf_path, portfolio):
         )
     
     return products
+
 
 def lookup_product_ingredients(products_data):
     """Placeholder for ingredient lookup"""
