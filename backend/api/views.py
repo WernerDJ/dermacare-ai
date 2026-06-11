@@ -21,6 +21,55 @@ from .permissions import IsAdmin, IsAdminOrReadOnly, IsOwnerOrAdmin
 from .tasks import analyze_portfolio_task
 from .utils import ask_gemini_question
 
+    
+def ask_gemini_question(question, products, ingredients, brands):
+    """
+    Ask Gemini AI a question about the products from selected brands
+    Returns: (answer, tokens_used)
+    """
+    import google.generativeai as genai
+    from django.conf import settings
+    
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    
+    # Build context about the products
+    products_context = "\n".join([
+        f"- {p['name']} ({p['category']}): {p['description']}"
+        for p in products
+    ])
+    
+    ingredients_context = "\n".join([
+        f"- {name}: {ing}"
+        for name, ing in ingredients.items()
+    ]) if ingredients else "No ingredient data available"
+    
+    # Build the prompt
+    prompt = f"""You are a skincare expert assistant. Answer questions about these products from {', '.join(brands)}:
+
+PRODUCTS:
+{products_context}
+
+INGREDIENTS:
+{ingredients_context}
+
+USER QUESTION: {question}
+
+Please provide a helpful, accurate answer based only on the product information provided above. Do not mention products or brands not listed above."""
+    
+    try:
+        response = model.generate_content(prompt)
+        answer = response.text
+        
+        # Estimate tokens (rough approximation)
+        tokens_used = len(prompt.split()) + len(answer.split())
+        
+        return answer, tokens_used
+        
+    except Exception as e:
+        print(f"❌ Gemini API Error: {str(e)}")
+        return f"Sorry, I couldn't answer that question. Error: {str(e)}", 0
+
 
 
 @api_view(['GET'])
@@ -208,7 +257,8 @@ class UserSessionViewSet(viewsets.ViewSet):
             session.save()
             serializer = UserSessionSerializer(session)
             return Response(serializer.data)
-    
+
+
     @action(detail=False, methods=['post'])
     def ask_question(self, request):
         serializer = QuestionRequestSerializer(data=request.data)
