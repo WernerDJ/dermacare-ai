@@ -24,7 +24,6 @@ class BrandPortfolio(models.Model):
     def __str__(self):
         return self.name
 
-
 class Product(models.Model):
     """
     Individual product within a brand portfolio
@@ -44,10 +43,10 @@ class Product(models.Model):
     def __str__(self):
         return f"{self.portfolio.name} - {self.name}"
 
-
 class Ingredient(models.Model):
     """
-    Ingredients for a product (from APIs and fallbacks)
+    Ingredients for a product (from multiple sources: PDF, APIs, Gemini)
+    Allows one product to have multiple ingredient records from different sources
     """
     SOURCE_CHOICES = [
         ('pdf', 'PDF Document'),
@@ -55,7 +54,7 @@ class Ingredient(models.Model):
         ('gemini', 'Gemini Fallback'),
     ]
     
-    product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name='ingredient')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='ingredients')
     ingredients_list = models.TextField(help_text="Comma-separated INCI ingredients")
     source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='pdf')
     barcode = models.CharField(max_length=20, blank=True, help_text="UPC/EAN barcode")
@@ -64,10 +63,10 @@ class Ingredient(models.Model):
     
     class Meta:
         verbose_name_plural = 'Ingredients'
+        unique_together = ('product', 'source')
     
     def __str__(self):
         return f"{self.product.name} - {self.source}"
-
 
 class AnalysisTask(models.Model):
     """
@@ -95,7 +94,6 @@ class AnalysisTask(models.Model):
     
     def __str__(self):
         return f"{self.portfolio.name} - {self.status}"
-
 
 class UserSession(models.Model):
     """

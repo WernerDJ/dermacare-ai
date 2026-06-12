@@ -128,7 +128,7 @@ def extract_products_from_document(pdf_path, portfolio):
     # Create Product objects
     print(f"📦 Creating {len(products)} products in database...")
     for prod in products:
-        Product.objects.create(
+        product = Product.objects.create(
             portfolio=portfolio,
             name=prod.get('name', ''),
             description=prod.get('description', ''),
@@ -137,7 +137,22 @@ def extract_products_from_document(pdf_path, portfolio):
             how_to_use=prod.get('how_to_use', ''),
             pdf_ingredients=prod.get('ingredients', '')
         )
-    
+        
+        # Create Ingredient record from PDF extraction
+        if prod.get('ingredients', ''):
+            try:
+                ing, created = Ingredient.objects.get_or_create(
+                    product=product,
+                    source='pdf',
+                    defaults={'ingredients_list': prod.get('ingredients', '')}
+                )
+                action = "created" if created else "updated"
+                print(f"✓ {product.name}: Ingredient {action}")
+            except Exception as e:
+                print(f"❌ ERROR creating ingredient for {product.name}: {str(e)}")
+                import traceback
+                traceback.print_exc()
+
     return products
 
 

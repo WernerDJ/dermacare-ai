@@ -292,8 +292,21 @@ class UserSessionViewSet(viewsets.ViewSet):
                         'how_to_use': product.how_to_use
                     })
                     
-                    if hasattr(product, 'ingredient'):
-                        ingredients_data[product.name] = product.ingredient.ingredients_list
+                    # Combine all ingredient sources for this product
+                    all_ingredients = []
+
+                    # Add PDF ingredients from the Product model
+                    if product.pdf_ingredients:
+                        all_ingredients.append(product.pdf_ingredients)
+                        
+                    # Add ingredients from the Ingredient table (API sources, etc)
+                    for ingredient in product.ingredients.all():
+                        if ingredient.ingredients_list:
+                            all_ingredients.append(ingredient.ingredients_list)
+
+                    if all_ingredients:
+                        combined = " | ".join(all_ingredients)  # Combine multiple sources
+                        ingredients_data[product.name] = combined
             
             answer, tokens_used = ask_gemini_question(
                 question=question,
