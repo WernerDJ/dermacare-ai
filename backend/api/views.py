@@ -298,7 +298,7 @@ class UserSessionViewSet(viewsets.ViewSet):
                     # Add PDF ingredients from the Product model
                     if product.pdf_ingredients:
                         all_ingredients.append(product.pdf_ingredients)
-                        
+
                     # Add ingredients from the Ingredient table (API sources, etc)
                     for ingredient in product.ingredients.all():
                         if ingredient.ingredients_list:
@@ -307,7 +307,11 @@ class UserSessionViewSet(viewsets.ViewSet):
                     if all_ingredients:
                         combined = " | ".join(all_ingredients)  # Combine multiple sources
                         ingredients_data[product.name] = combined
-            
+            print(f"DEBUG: Total products: {len(products_data)}")
+            print(f"DEBUG: Products with ingredients:")
+            for name, ing in ingredients_data.items():
+                print(f"  - {name}: {ing[:60]}...")
+            print(f"DEBUG: Total ingredients: {len(ingredients_data)}")
             answer, tokens_used = ask_gemini_question(
                 question=question,
                 products=products_data,
