@@ -6,6 +6,7 @@ from pathlib import Path
 from .models import BrandPortfolio, Product, Ingredient, AnalysisTask
 import google.generativeai as genai
 from django.conf import settings
+from .scrapers import get_enriched_ingredients
 
 
 @shared_task(bind=True)
@@ -125,7 +126,7 @@ def extract_products_from_document(pdf_path, portfolio):
         traceback.print_exc()
         products = []
     
-    # Create Product objects
+    # Create Product objects AND Ingredient records
     print(f"📦 Creating {len(products)} products in database...")
     for prod in products:
         product = Product.objects.create(
@@ -140,18 +141,22 @@ def extract_products_from_document(pdf_path, portfolio):
         
         # Create Ingredient record from PDF extraction
         if prod.get('ingredients', ''):
-            try:
-                ing, created = Ingredient.objects.get_or_create(
-                    product=product,
-                    source='pdf',
-                    defaults={'ingredients_list': prod.get('ingredients', '')}
-                )
-                action = "created" if created else "updated"
-                print(f"✓ {product.name}: Ingredient {action}")
-            except Exception as e:
-                print(f"❌ ERROR creating ingredient for {product.name}: {str(e)}")
-                import traceback
-                traceback.print_exc()
+            Ingredient.objects.get_or_create(
+                product=product,
+                source='pdf',
+                defaults={'ingredients_list': prod.get('ingredients', '')}
+            )
+        
+        # TRY TO ENRICH WITH INCIDecoder/What's in My Jar
+        enriched_ingredients, source = get_enriched_ingredients(
+            f"{portfolio.name} {product.name}"
+        )
+        if enriched_ingredients:
+            Ingredient.objects.get_or_create(
+                product=product,
+                source=source,
+                defaults={'ingredients_list': enriched_ingredients}
+            )
 
     return products
 
