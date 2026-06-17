@@ -4,7 +4,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0002_alter_ingredient_product_and_more'),
+        ('api', '0002_fix_ingredient_fk'),
     ]
 
     operations = [
