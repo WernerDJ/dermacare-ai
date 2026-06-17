@@ -204,7 +204,7 @@ function AdminPanel({ token, onLogout }) {
               {portfolios.map((portfolio) => (
                 <div key={portfolio.id} className="portfolio-card">
                   <div className="portfolio-header">
-                    <h3>{portfolio.name}</h3>
+                    <h3>{portfolio.portfolio_name}</h3>
                     <button
                       onClick={() => handleDelete(portfolio.id)}
                       className="delete-btn"
