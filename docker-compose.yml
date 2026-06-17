@@ -1,9 +1,8 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
     container_name: dermacare_db
+    restart: always
     environment:
       POSTGRES_DB: dermacare_db
       POSTGRES_USER: dermacare_user
@@ -23,6 +22,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: dermacare_redis
+    restart: always
     ports:
       - "6379:6379"
     networks:
@@ -38,13 +38,14 @@ services:
       context: ./backend
       dockerfile: Dockerfile_backend
     container_name: dermacare_backend
+    restart: always
     command: gunicorn dermacare.wsgi:application --bind 0.0.0.0:8000
     ports:
       - "8000:8000"
     environment:
       DEBUG: "False"
       SECRET_KEY: "your-secret-key-here"
-      ALLOWED_HOSTS: "localhost,127.0.0.1,backend"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,backend,13.63.115.141"
       DB_ENGINE: "django.db.backends.postgresql"
       DB_NAME: "dermacare_db"
       DB_USER: "dermacare_user"
@@ -70,11 +71,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile_backend
     container_name: dermacare_celery
+    restart: always
     command: celery -A dermacare worker -l info
     environment:
       DEBUG: "False"
       SECRET_KEY: "your-secret-key-here"
-      ALLOWED_HOSTS: "localhost,127.0.0.1,backend"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,backend,13.63.115.141"
       DB_ENGINE: "django.db.backends.postgresql"
       DB_NAME: "dermacare_db"
       DB_USER: "dermacare_user"
@@ -100,6 +102,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile_frontend
     container_name: dermacare_frontend
+    restart: always
     ports:
       - "3000:3000"
     environment:
@@ -113,6 +116,7 @@ services:
   nginx:
     image: nginx:latest
     container_name: dermacare_nginx
+    restart: always
     ports:
       - "80:80"
     volumes:
