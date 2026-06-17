@@ -152,10 +152,12 @@ def extract_products_from_document(pdf_path, portfolio):
             f"{portfolio.name} {product.name}"
         )
         if enriched_ingredients:
-            Ingredient.objects.get_or_create(
+            Ingredient.objects.update_or_create(
                 product=product,
-                source=source,
-                defaults={'ingredients_list': enriched_ingredients}
+                defaults={
+                    'ingredients_list': enriched_ingredients,
+                    'source': source
+                }
             )
 
     return products
