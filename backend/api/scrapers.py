@@ -50,20 +50,20 @@ def scrape_incidecoder(product_name):
             response.raise_for_status()
             soup = BeautifulSoup(response.content, 'html.parser')
 
-            content_div = soup.find('div', class_='content')
-            if not content_div:
-                content_div = soup.find('main') or soup.find('article')
+            # INCIDecoder lists each ingredient as a link to /ingredients/
+            ingredient_links = soup.find_all('a', href=True)
+            ingredients = []
+            for link in ingredient_links:
+                href = link.get('href', '')
+                if '/ingredients/' in href:
+                    name = link.get_text().strip()
+                    if name and len(name) > 1:
+                        ingredients.append(name)
 
-            if content_div:
-                text = content_div.get_text()
-                lines = text.split('\n')
-                for line in lines:
-                    line = line.strip()
-                    if ',' in line and len(line) > 100:
-                        if any(term in line for term in ['Aqua', 'Water', 'Alcohol', 'Glycerin']):
-                            ingredients = ' '.join(line.split())
-                            print(f"✅ INCIDecoder found: {ingredients[:100]}...")
-                            return ingredients
+            if len(ingredients) >= 3:
+                ingredients_str = ', '.join(ingredients)
+                print(f"✅ INCIDecoder found {len(ingredients)} ingredients: {ingredients_str[:100]}...")
+                return ingredients_str
 
             print(f"⚠️ No ingredients found at: {url}")
 
