@@ -50,20 +50,31 @@ def scrape_incidecoder(product_name):
             response.raise_for_status()
             soup = BeautifulSoup(response.content, 'html.parser')
 
-            # INCIDecoder lists each ingredient as a link to /ingredients/
-            ingredient_links = soup.find_all('a', href=True)
-            ingredients = []
-            for link in ingredient_links:
-                href = link.get('href', '')
-                if '/ingredients/' in href:
-                    name = link.get_text().strip()
-                    if name and len(name) > 1:
-                        ingredients.append(name)
+            # INCIDecoder puts the full ingredient list in ingredlist-long
+            ingredient_section = (
+                soup.find(id='ingredlist-long') or
+                soup.find(id='ingredlist-long-section') or
+                soup.find(id='ingredlist-short')
+            )
 
-            if len(ingredients) >= 3:
-                ingredients_str = ', '.join(ingredients)
-                print(f"✅ INCIDecoder found {len(ingredients)} ingredients: {ingredients_str[:100]}...")
-                return ingredients_str
+            if ingredient_section:
+                # Extract only direct ingredient links from this section
+                seen = set()
+                ingredients = []
+                for link in ingredient_section.find_all('a', href=True):
+                    href = link.get('href', '')
+                    if '/ingredients/' in href:
+                        name = link.get_text().strip()
+                        # Skip duplicates, empty names, and non-ingredient text
+                        if name and len(name) > 1 and name not in seen:
+                            if not any(skip in name.lower() for skip in ['more', 'click', 'read', 'here', '>>']):
+                                seen.add(name)
+                                ingredients.append(name)
+
+                if len(ingredients) >= 3:
+                    ingredients_str = ', '.join(ingredients)
+                    print(f"✅ INCIDecoder found {len(ingredients)} ingredients: {ingredients_str[:100]}...")
+                    return ingredients_str
 
             print(f"⚠️ No ingredients found at: {url}")
 
