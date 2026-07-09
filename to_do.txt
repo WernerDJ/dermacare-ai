@@ -1,0 +1,392 @@
+- Allow the source of info to be txt, docx or xlsx files
+#############################################################################################################################
+The app will implement a system to save tokens by vectorizing the data extracted from pdf's (or txt or docx), creating a comprehensive database that can be filtered.
+Administrator
+Using a first LLM agent that extracts the product portfolio information from pdf's to extract the text (that has already been designed and implemented but now the agent sould be able to extract from txt and docx also). If during the extractionn of ingredients from the source document(pdf, txt, docx) the number of igredients is more than 6, the ingredient web search tools will not be used. A minumum of 7 ingredients should be more than enough for an ingredients list. 
+Using a second LLM agent that creates a chroma database to host the extracted informaton in a structured manner, where the metadata associated to each register will allow for the data to be filtered. (The information could be given to the new agent as a handoff procedure)
+The app should be designed to use python defined tools and OpenAI tools. One tool would be the connection to the database, another the connection to the ICIDecoder, another the access to open_beauty_facts and the last the contact to OpenAI web search to serch for the ingredients. The information regarding how to configure OpenAI web search is here https://developers.openai.com/api/docs/guides/tools-web-search.
+The first agent cannot be accessed by the user, only bu the administrator
+The second and the third agents are the only ones that have direct access to the database, the second agent can read and write into it, the third agent can only read.
+The fourth agent receives the information to be considered to answer the users reuqest from the thid agent and can only take in  account that information  and produce an answer. 
+
+#############################################################################################################################
+#########################       OpenAI example   (gpt-4.1-mini is too low, better gpt-4.1)         ##########################
+#############################################################################################################################
+import os
+import dotenv
+dotenv.load_dotenv()
+from openai import OpenAI
+
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")   
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+
+response = client.responses.create(
+    model="gpt-4.1",
+    tools=[
+        {
+            "type": "web_search"
+        }
+    ],
+    input="""
+You are a cosmetic ingredient database. I need the INCI ingredient list for:
+Brand: Cerave
+Product: Skin Renewing Night Cream
+
+STRICT RULES:
+1. Only return ingredients if you are CERTAIN they are correct for this EXACT product
+2. If you are not 100% sure, respond with exactly: UNKNOWN
+3. NEVER guess, invent, or approximate ingredients
+4. NEVER use ingredients from a similar product
+5. Only use ingredients you have seen on official product packaging or reliable databases
+6. If the product has changed formulation over time and you are unsure which version, respond: UNKNOWN
+7. Return ONLY a comma-separated INCI ingredient list, nothing else
+8. No explanations, no preamble, no markdown
+
+Respond with either the exact INCI list or the single word UNKNOWN.
+"""
+)
+
+print(response.output_text)
+#############################################################################################################################
+Example from another app. This one using agents, probably more adequate for this app as a model to adapt
+#############################################################################################################################
+import os
+import chromadb
+import dotenv
+from agents import Agent, Runner, function_tool, trace, WebSearchTool
+dotenv.load_dotenv()
+chroma_client = chromadb.PersistentClient(path="../chroma")
+nutrition_db = chroma_client.get_collection(name="nutrition_db")
+@function_tool
+def calorie_lookup_tool(query: str, max_results: int = 3) -> str:
+    """
+    Tool function for a RAG database to look up calorie information for specific food items, but not for meals.
+
+    Args:
+        query: The food item to look up.
+        max_results: The maximum number of results to return.
+
+    Returns:
+        A string containing the nutrition information.
+    """
+
+    results = nutrition_db.query(query_texts=[query], n_results=max_results)
+
+    if not results["documents"][0]:
+        return f"No nutrition information found for: {query}"
+
+    # Format results for the agent
+    formatted_results = []
+    for i, doc in enumerate(results["documents"][0]):
+        metadata = results["metadatas"][0][i]
+        food_item = metadata["food_item"].title()
+        calories = metadata["calories_per_100g"]
+        category = metadata["food_category"].title()
+
+        formatted_results.append(
+            f"{food_item} ({category}): {calories} calories per 100g"
+        )
+
+    return "Nutrition Information:\n" + "\n".join(formatted_results)
+    
+calorie_agent_with_search = Agent(
+    name="Nutrition Assistant",
+    model="gpt-4.1",
+    instructions="""
+    * You are a helpful nutrition assistant giving out calorie information.
+    * You give concise answers.
+    * You follow this workflow
+        0) First, use the calorie_lookup_tool to get the calorie information of the ingredients. But only use the result if it's explicitly for the food requested in the query.
+        1) If you couldn't find the exact match for the food or you need to look up the ingredients, search the EXA web to figure out the exact ingredients of the meal.
+        Even if you have the calories in the web search response, you should still use the calorie_lookup_tool to get the calorie
+        information of the ingredients to make sure the information you provide is consistent.
+        2) Then, if necessary, use the calorie_lookup_tool to get the calorie information of the ingredients.
+    * Even if you know the recipe of the meal, always use Exa Search to find the exact recipe and ingredients.
+    * Once you know the ingredients, use the calorie_lookup_tool to get the calorie information of the individual ingredients.
+    * If the query is about the meal, in your final output give a list of ingredients with their quantities and calories for a single serving. Also display the total calories.
+    * Don't use the calorie_lookup_tool more than 10 times.
+    """,
+    tools=[calorie_lookup_tool, WebSearchTool(),],
+)
+with trace("Nutrition Assistant"):
+    result = await Runner.run(
+        calorie_agent_with_search,
+        "How many calories are in total in a banana and an apple?"
+    )
+
+print(result.final_output)
+#############################################################################################################################
+End of example
+#############################################################################################################################
+
+User
+Using a third LLM agent to select the data, accordin to the user query, that has to be uploaded to a forth LLM agent memory
+so instead of uploading the whole portfolio we upload only a portion of one or more portfolios, for instance, if the user asks
+for the best acne treatment which uses the least chemical compounds, only acne treatments from the selected portfolios are filtered in from the database, and that information is prepared to be uploaded to the fourth LLM agent memory. and the rest of information, like anti-aging treatments, sunscreens, etc, is filtered out by the third agent an not uploaded to the LLM memory of the fourth agent. 
+#############################################################################################################################
+
+This idea is described bellow from the moment the second agent intervenes onward, if there are nay other possibilities to save tokens, please make me know
+So far
+#############################################################################################################################
+
+- Instruct the second agent to add metadata category fields that will include information as Product name. Skin type: undefined, oily skin, dry skin, combination skin. Kind of treatment:anti-aeging over 30,  anti-aeging post menopausal, revitalizing, anti-wrinkles, body, sun protection, aftersun). Skin_problems: none, rosacea, acne, eccema, atopic dermatitis, scars, hyperpigmentation, sun protection, aftersun. Other parts of the body: feet, hands, hair. I have tried to separate the product description in a few fields, which should be included also as Ingredients, How to use it, Additional infomation. In some documents I have separated the data in other fields as Who is for, and that has information as the type of skin or if it is for Other parts of the body and also the field What it is for, where what is included is the  Kind of treatment
+
+-The user checks out which portfolio(s) they want to be analized.
+- The user makes an information request and that is read by the third LLM agent which decides which information to extract from the chroma database and upload to the 4rth LLM agent, 
+The 4th LLM agent takes uses the information given by the 3rd agent to construct the answer to the user query.
+#############################################################################################################################
+Esample of OpenAI setting up
+#############################################################################################################################
+
+- OpenAI can let the agent access tools that have been defined as python functions by inserting this decorator @function_tool on the top of the function, it is necessary first to import this:
+import chromadb   
+import dotenv
+from pathlib import Path  #this might not be necessary, but it can be useful 
+from agents import Agent, Runner, function_tool, trace   # function_tool is what is going to let is add a decorator @function_tool to a function
+
+#############################################################################################################################
+- A function declared with @function_tool as a tool can be called directly by the LLM as a tool to be used. 
+Example from another project
+#############################################################################################################################
+
+@function_tool
+def calorie_lookup_tool(query: str, max_results: int = 3) -> str:
+	'''
+	'''
+    results = nutrition_db.query(query_texts=[query], n_results=max_results)
+    # Format results for the agent
+    formatted_results = []
+    for i, doc in enumerate(results["documents"][0]):
+        metadata = results["metadatas"][0][i]
+        food_item = metadata["food_item"].title()
+        calories = metadata["calories_per_100g"]
+        category = metadata["food_category"].title()
+
+        formatted_results.append(
+            f"{food_item} ({category}): {calories} calories per 100g"
+        )
+
+    return "Nutrition Information:\n" + "\n".join(formatted_results)
+
+#############################################################################################################################
+ And once defined the tool the agent has to be defined, notice the tools section at the end of the query
+ Example form another project
+ #############################################################################################################################
+ calorie_agent = Agent(
+    name="Nutrition Assistant",
+    instructions="""
+    You are a helpful nutrition assistant giving out calorie information.
+    You give concise answers.
+    If you need to look up calorie information, use the calorie_lookup_tool.
+    """,
+    tools=[calorie_lookup_tool],
+)
+
+#############################################################################################################################
+And finally the query is being sent to the agent
+ Example form another project
+#############################################################################################################################
+with trace("Nutrition Assistant with RAG"):
+    result = await Runner.run(
+        calorie_agent,
+        "How many calories are in total in a banana and an apple? Also give calories per 100g",
+    )
+    print(result.final_output)
+
+#############################################################################################################################
+#############################################################################################################################
+- When the user makes a question the third agent will decide according to which value(s) of category the data should be further filtered. It should accept a wide range of subjects unless the question clearly states that the user is asking a question about one of them, for instance somebody that just states that would like a micellar water cleaner, would require to upload all but hair, hands and feet data, but somebody that states that wants something for acne, eliminates all what is not for acne. 
+Structure of the database:
+Brand
+	category: - hands, acne, etc
+	  -Product 1: KindOf(serum, cleanser, cream, toner), What, usage (if not, retrieve from Internet, from a source, not hallucinate), ingredients, characterisitcs
+	  -Product 2: KindOf(serum, cleanser, cream, toner), What, usage (if not, retrieve from Internet, from a source, not hallucinate), ingredients, characterisitcs
+	  -Product 3:
+	  ....
+#############################################################################################################################
+################################################### Example #################################################################
+Who is it for:
+A gentle facial cleanser designed for sensitive and oily skin.
+
+
+Ingredients:
+Aloe Vera, Salicylic Acid, Glycerin
+
+What is it:
+Removes excess oil, unclogs pores, reduces acne risk.
+
+How to use it:
+Apply twice daily on wet skin and rinse thoroughly.
+
+
+Additional Information:
+Non-comedogenic, fragrance-free, dermatologically tested
+#############################################################################################################################
+I don´t want you to apply the code of the example bellow to the dermocosmetic app, but to use a similar rationale to adapt the data extracted as text in order to insert it in the chroma database. As you can see it is done in three steps, the first is the text extraction and soe cleansing like applying strp() to clean the lines with data of useless spaces, which is not pasted here, and next, the two functions that I paste, the first prepares the databse contents for insertion and the second does populate the database. 
+
+
+#############################################################################################################################
+Example of the creation of a chroma database
+#############################################################################################################################
+def prepare_nutrition_qa_documents(
+    file_path: str, sample_percentage: float = 0.05
+) -> Dict:
+    """
+    Convert Q&A pairs into ChromaDB-ready documents.
+    Each Q&A pair becomes a searchable document.
+    """
+    qa_pairs = parse_qa_pairs(file_path, sample_percentage)
+
+    documents = []
+    metadatas = []
+    ids = []
+
+    # Process Q&A pairs with progress bar
+    for qa in tqdm(qa_pairs, desc="Preparing documents"):
+        # Create rich document text for semantic search
+        document_text = f"""
+        Question: {qa['question']}
+        Answer: {qa['answer']}
+        
+        This Q&A pair provides information about nutrition and health topics.
+        """.strip()
+
+        # Extract keywords from question for better searchability
+        question_words = re.findall(r"\b\w+\b", qa["question"].lower())
+        answer_words = re.findall(r"\b\w+\b", qa["answer"].lower())
+        all_words = question_words + answer_words
+
+        # Create metadata for filtering and exact lookups
+        metadata = {
+            "question": qa["question"],
+            "answer": qa["answer"],
+            "question_length": len(qa["question"]),
+            "answer_length": len(qa["answer"]),
+            "keywords": " ".join(set(all_words)),
+            "has_question_mark": "?" in qa["question"],
+            "topic": "nutrition_qa",
+        }
+
+        documents.append(document_text)
+        metadatas.append(metadata)
+        ids.append(qa["id"])
+
+    return {"documents": documents, "metadatas": metadatas, "ids": ids}
+
+
+def setup_nutrition_qa_chromadb(
+    file_path: str,
+    collection_name: str = "nutrition_qna",
+    sample_percentage: float = 0.05,
+):
+    """
+    Create and populate ChromaDB collection with nutrition Q&A data.
+    """
+    # Initialize ChromaDB
+    client = chromadb.PersistentClient("../chroma")
+
+    # Create collection (delete if exists)
+    try:
+        client.delete_collection(collection_name)
+    except:
+        pass
+
+    collection = client.create_collection(
+        name=collection_name,
+        metadata={
+            "description": "Nutrition Q&A database with questions and answers about nutrition and health"
+        },
+    )
+
+    # Prepare documents
+    data = prepare_nutrition_qa_documents(file_path, sample_percentage)
+
+    # Add to ChromaDB with progress bar
+    print("Adding documents to ChromaDB...")
+    collection.add(
+        documents=data["documents"], metadatas=data["metadatas"], ids=data["ids"]
+    )
+
+    print(
+        f"Added {len(data['documents'])} Q&A pairs to ChromaDB collection '{collection_name}'"
+    )
+    return collection
+#############################################################################################################################
+End of the example
+#############################################################################################################################
+
+#############################################################################################################################
+Other things to add to the app or change
+#############################################################################################################################
+If a new pdf for a brand that has been already analyzed appears with more products the app should have the option to
+- check which products are new and which are already registered
+- Anzlyze the new products and add their details to the database
+
+The admin should have access in another tab to the AI chat that the users are accessing
+
+There is a mistmatch in /home/werner/Python/AI_assisted/dermacare-project/backend/api between what the models.py expect to be searching, which is wrong and what  scrapers.py are actually searching, which is right
+models.py say:
+class Ingredient(models.Model):
+    """
+    Ingredients for a product (from multiple sources: PDF, APIs, Gemini)
+    Allows one product to have multiple ingredient records from different sources
+    """
+    SOURCE_CHOICES = [
+        ('pdf', 'PDF Document'),
+        ('upc_inci', 'UPC ItemDB + INCIApi'),
+        ('gemini', 'Gemini Fallback'),
+    ]
+    
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='ingredients')
+    ingredients_list = models.TextField(help_text="Comma-separated INCI ingredients")
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='pdf')
+    barcode = models.CharField(max_length=20, blank=True, help_text="UPC/EAN barcode")
+    quality_score = models.IntegerField(null=True, blank=True, help_text="INCIApi quality score")
+    found_date = models.DateTimeField(auto_now_add=True)
+    
+and scrapers.py say:
+def scrape_incidecoder(product_name):
+    """
+    Scrape ingredients from INCIDecoder
+    Tries with full name first, then without brand name prefix
+    Returns: ingredients_string or None
+    """
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    }
+
+    slugs_to_try = []
+    full_slug = slugify(product_name)
+    slugs_to_try.append(full_slug)
+
+    words = product_name.strip().split()
+    if len(words) > 1:
+        without_brand = ' '.join(words[1:])
+        slugs_to_try.append(slugify(without_brand))
+
+    for slug in slugs_to_try:
+        try:
+            url = f"https://incidecoder.com/products/{slug}"
+            print(f"📍 Trying INCIDecoder: {url}")
+......
+...
+def search_open_beauty_facts(product_name):
+    """
+    Search Open Beauty Facts API for product ingredients
+    Returns: ingredients_string or None
+    """
+    try:
+        url = "https://world.openbeautyfacts.org/cgi/search.pl"
+        params = {
+            'search_terms': product_name,
+            'search_simple': 1,
+            'action': 'process',
+            'json': 1,
+            'page_size': 5,
+        }
+
+        print(f"📍 Trying Open Beauty Facts: {product_name}")
+
+
+Make the code to be more jailbreak-resistant
