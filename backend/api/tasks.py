@@ -4,169 +4,79 @@ import json
 import os
 from pathlib import Path
 from .models import BrandPortfolio, Product, Ingredient, AnalysisTask
-import google.generativeai as genai
+from .agents import Agent1Extractor, Agent2Vectorizer
 from django.conf import settings
-from .scrapers import get_enriched_ingredients
-
 
 @shared_task(bind=True)
 def analyze_portfolio_task(self, portfolio_id, pdf_path, lookup_ingredients=True):
-    """
-    Celery task to analyze PDF and extract products
-    """
-    try:
-        portfolio = BrandPortfolio.objects.get(id=portfolio_id)
-        analysis_task = AnalysisTask.objects.get(portfolio=portfolio, status='pending')
-        
-        # Update status
-        analysis_task.status = 'processing'
-        analysis_task.current_step = 'Extracting products from PDF...'
-        analysis_task.save()
-        
-        self.update_state(state='PROGRESS', meta={'current': 1, 'total': 3})
-        
-        # Extract products from PDF
-        products_data = extract_products_from_document(pdf_path, portfolio)
-        portfolio.total_products = len(products_data)
-        
-        # Lookup ingredients if requested
-        if lookup_ingredients:
-            analysis_task.current_step = 'Looking up ingredients...'
-            analysis_task.progress = 50
-            analysis_task.save()
-            
-            self.update_state(state='PROGRESS', meta={'current': 2, 'total': 3})
-            
-            ingredients_lookup = lookup_product_ingredients(products_data)
-            portfolio.products_with_ingredients = sum(1 for ing in ingredients_lookup.values() if ing)
-        
-        # Save results
-        analysis_task.current_step = 'Saving results...'
-        analysis_task.progress = 90
-        analysis_task.save()
-        
-        self.update_state(state='PROGRESS', meta={'current': 3, 'total': 3})
-        
-        # Save portfolio as JSON
-        save_portfolio_as_json(portfolio, products_data, ingredients_lookup if lookup_ingredients else {})
-        
-        # Mark as complete
-        analysis_task.status = 'completed'
-        analysis_task.progress = 100
-        analysis_task.completed_date = timezone.now()
-        analysis_task.save()
-        
-        return {'status': 'success', 'portfolio_id': portfolio_id}
-        
-    except Exception as e:
-        try:
-            analysis_task = AnalysisTask.objects.get(portfolio__id=portfolio_id)
-            analysis_task.status = 'failed'
-            analysis_task.error_message = str(e)
-            analysis_task.completed_date = timezone.now()
-            analysis_task.save()
-        except:
-            pass
-        
-        raise
-
-def extract_products_from_document(pdf_path, portfolio):
-    """Extract products from PDF using Gemini File API"""
-    import time
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    """Analyze portfolio using Agent 1 + Agent 2"""
+    
+    portfolio = BrandPortfolio.objects.get(id=portfolio_id)
+    task = AnalysisTask.objects.create(
+        portfolio=portfolio,
+        status='processing'
+    )
     
     try:
-        # Upload file to Gemini (same as original approach)
-        print(f"📤 Uploading PDF to Gemini: {pdf_path}")
-        myfile = genai.upload_file(pdf_path, mime_type="application/pdf")
+        # AGENT 1: Extract products
+        print(f"🔍 Agent 1: Extracting from {Path(pdf_path).name}")
         
-        # Wait for processing
-        print(f"⏳ Waiting for Gemini to process...")
-        while myfile.state.name == "PROCESSING":
-            time.sleep(2)
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        extractor = Agent1Extractor(api_key=openai_api_key)
         
-        myfile = genai.get_file(myfile.name)
-        print(f"✅ File ready: {myfile.state.name}")
+        products, errors = extractor.extract_from_document(
+            file_path=pdf_path,
+            brand_name=portfolio.name
+        )
         
-        prompt = """
-        Extract ALL products from this PDF document.
-        For each product, provide:
-        1. Product name
-        2. Description (2-3 sentences)
-        3. Category (skincare, makeup, etc)
-        4. Benefits (comma-separated)
-        5. How to use (brief)
+        print(f"✅ Extracted {len(products)} products, {len(errors)} errors")
         
-        Return ONLY as JSON array with fields: name, description, category, benefits, how_to_use, ingredients
+        # Report errors if any
+        if errors:
+            error_report = extractor.generate_error_report(errors)
+            print(f"⚠️ Extraction Report:\n{error_report}")
         
-        Example: [{"name":"Product A","description":"...","category":"...","benefits":"...","how_to_use":"...","ingredients":"..."}]
-        """
+        # AGENT 2: Vectorize and store
+        print(f"🧠 Agent 2: Vectorizing products")
         
-        # Use file reference (not inline)
-        response = model.generate_content([prompt, myfile])
+        vectorizer = Agent2Vectorizer(chroma_db_path="/app/chroma_db")
         
-        print(f"✅ Gemini Response: {response.text[:200]}")
+        stored_count, enrichment_log = vectorizer.vectorize_products(
+            products=products,
+            brand_name=portfolio.name
+        )
         
-        # Parse JSON
-        response_text = response.text.strip()
-        if response_text.startswith('```json'):
-            response_text = response_text.split('```json')[1].split('```')[0].strip()
-        elif response_text.startswith('```'):
-            response_text = response_text.split('```')[1].split('```')[0].strip()
+        print(f"✅ Stored {stored_count} products in Chroma")
         
-        products = json.loads(response_text)
+        # Count enrichments
+        enriched_count = sum(1 for log in enrichment_log if log.get('enriched'))
+        print(f"✅ Enriched {enriched_count}/{len(products)} products")
         
-        if not isinstance(products, list):
-            products = []
+        # Update task status
+        task.status = 'completed'
+        task.completed_at = timezone.now()
+        task.product_count = stored_count
+        task.save()
+        
+        return {
+            'status': 'success',
+            'portfolio_id': portfolio_id,
+            'products': stored_count,
+            'enriched': enriched_count,
+            'errors': len(errors)
+        }
         
     except Exception as e:
         print(f"❌ Error: {str(e)}")
         import traceback
         traceback.print_exc()
-        products = []
-    
-    # Create Product objects AND Ingredient records
-    print(f"📦 Creating {len(products)} products in database...")
-    for prod in products:
-        product = Product.objects.create(
-            portfolio=portfolio,
-            name=prod.get('name', ''),
-            description=prod.get('description', ''),
-            category=prod.get('category', ''),
-            benefits=prod.get('benefits', ''),
-            how_to_use=prod.get('how_to_use', ''),
-            pdf_ingredients=prod.get('ingredients', '')
-        )
         
-        # Create Ingredient record from PDF extraction
-        if prod.get('ingredients', ''):
-            Ingredient.objects.get_or_create(
-                product=product,
-                source='pdf',
-                defaults={'ingredients_list': prod.get('ingredients', '')}
-            )
+        task.status = 'failed'
+        task.error_message = str(e)
+        task.save()
         
-        # TRY TO ENRICH WITH INCIDecoder/What's in My Jar
-        enriched_ingredients, source = get_enriched_ingredients(
-            f"{portfolio.name} {product.name}"
-        )
-        if enriched_ingredients:
-            Ingredient.objects.update_or_create(
-                product=product,
-                defaults={
-                    'ingredients_list': enriched_ingredients,
-                    'source': source
-                }
-            )
-
-    return products
-
-
-def lookup_product_ingredients(products_data):
-    """Placeholder for ingredient lookup"""
-    return {}
-
-def save_portfolio_as_json(portfolio, products_data, ingredients_lookup=None):
-    """Save portfolio data to JSON"""
-    pass
+        return {
+            'status': 'error',
+            'portfolio_id': portfolio_id,
+            'error': str(e)
+        }

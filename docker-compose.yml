@@ -54,7 +54,7 @@ services:
       DB_PORT: "5432"
       CELERY_BROKER_URL: "redis://redis:6379/0"
       CELERY_RESULT_BACKEND: "redis://redis:6379/0"
-      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
       INCI_API: "${INCI_API}"
     depends_on:
       db:
@@ -85,7 +85,7 @@ services:
       DB_PORT: "5432"
       CELERY_BROKER_URL: "redis://redis:6379/0"
       CELERY_RESULT_BACKEND: "redis://redis:6379/0"
-      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
       INCI_API: "${INCI_API}"
     depends_on:
       db:

@@ -10,7 +10,6 @@ from agents import trace
 import chromadb
 from api.scrapers import get_enriched_ingredients
 
-openai_api_key = os.getenv("OPENAI_API_KEY")
 logger = logging.getLogger(__name__)
 
 class Agent2Vectorizer:
@@ -29,6 +28,7 @@ class Agent2Vectorizer:
         self.chroma_client = chromadb.PersistentClient(path=chroma_db_path)
         self.db_path = chroma_db_path
         self.logger = logger
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
     
     def vectorize_products(self, products: List[Dict], brand_name: str) -> Tuple[int, List[Dict]]:
         """
@@ -41,7 +41,6 @@ class Agent2Vectorizer:
         Returns:
             (products_stored, enrichment_log)
         """
-        
         enrichment_log = []
         
         # Create or get collection
@@ -61,7 +60,7 @@ class Agent2Vectorizer:
                 
                 if ingredient_count < 7:
                     # Enrich ingredients
-                    enriched, source = self._enrich_ingredients(product, openai_api_key)
+                    enriched, source = self._enrich_ingredients(product)
                     if enriched:
                         product['ingredients_enriched'] = enriched
                         product['ingredients_source'] = source
@@ -76,13 +75,14 @@ class Agent2Vectorizer:
                             "enriched": False,
                             "reason": "No enrichment found"
                         })
+
                 else:
                     enrichment_log.append({
                         "product": product['product'],
                         "enriched": False,
                         "reason": "Enough ingredients already"
                     })
-                
+
                 # Create document for storage
                 doc_id = f"{brand_name}_{idx}_{product['product'].replace(' ', '_')}"
                 metadata = {
@@ -92,6 +92,7 @@ class Agent2Vectorizer:
                     "treatment_kind": product['treatment_kind'],
                     "skin_problems": json.dumps(product['skin_problems']),
                     "body_parts": json.dumps(product['body_parts']),
+                    "ingredients": product.get('ingredients_enriched', product['ingredients']),
                     "usage": product['usage'],
                     "benefits": product['benefits']
                 }
@@ -110,13 +111,11 @@ class Agent2Vectorizer:
         
         return len(products), enrichment_log
 
-    def _enrich_ingredients(self, product: Dict, openai_api_key: str = None) -> Tuple[str, str]:
+    def _enrich_ingredients(self, product: Dict) -> Tuple[str, str]:
         """Enrich ingredients using scrapers"""
         
         try:
-            import os
-            if not openai_api_key:
-                openai_api_key = os.getenv("OPENAI_API_KEY")
+            openai_api_key = self.openai_api_key
             
             enriched, source = get_enriched_ingredients(
                 f"{product['brand']} {product['product']}",
