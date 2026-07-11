@@ -9,6 +9,7 @@ Agent 4: Answerer - Answers user questions with context
 from .agent1_extractor import Agent1Extractor
 from .agent2_vectorizer import Agent2Vectorizer
 from .agent3_filter import Agent3Filter
+from .agent4_answerer import Agent4Answerer
 
-__all__ = ['Agent1Extractor', 'Agent2Vectorizer', 'Agent3Filter']
+__all__ = ['Agent1Extractor', 'Agent2Vectorizer', 'Agent3Filter', 'Agent4Answerer']
 
