@@ -19,57 +19,7 @@ from .serializers import (
 )
 from .permissions import IsAdmin, IsAdminOrReadOnly, IsOwnerOrAdmin
 from .tasks import analyze_portfolio_task
-from .utils import ask_gemini_question
-
-    
-def ask_gemini_question(question, products, ingredients, brands):
-    """
-    Ask Gemini AI a question about the products from selected brands
-    Returns: (answer, tokens_used)
-    """
-    import google.generativeai as genai
-    from django.conf import settings
-    
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-2.5-flash')
-    
-    # Build context about the products
-    products_context = "\n".join([
-        f"- {p['name']} ({p['category']}): {p['description']}"
-        for p in products
-    ])
-    
-    ingredients_context = "\n".join([
-        f"- {name}: {ing}"
-        for name, ing in ingredients.items()
-    ]) if ingredients else "No ingredient data available"
-    
-    # Build the prompt
-    prompt = f"""You are a skincare expert assistant. Answer questions about these products from {', '.join(brands)}:
-
-PRODUCTS:
-{products_context}
-
-INGREDIENTS:
-{ingredients_context}
-
-USER QUESTION: {question}
-
-Please provide a helpful, accurate answer based only on the product information provided above. Do not mention products or brands not listed above."""
-    
-    try:
-        response = model.generate_content(prompt)
-        answer = response.text
-        
-        # Estimate tokens (rough approximation)
-        tokens_used = len(prompt.split()) + len(answer.split())
-        
-        return answer, tokens_used
-        
-    except Exception as e:
-        print(f"❌ Gemini API Error: {str(e)}")
-        return f"Sorry, I couldn't answer that question. Error: {str(e)}", 0
-
+from .agents import Agent4Answerer
 
 
 @api_view(['GET'])
@@ -258,7 +208,6 @@ class UserSessionViewSet(viewsets.ViewSet):
             serializer = UserSessionSerializer(session)
             return Response(serializer.data)
 
-
     @action(detail=False, methods=['post'])
     def ask_question(self, request):
         serializer = QuestionRequestSerializer(data=request.data)
@@ -279,55 +228,48 @@ class UserSessionViewSet(viewsets.ViewSet):
             if not portfolios.exists():
                 return Response({'error': 'No portfolios selected'}, status=status.HTTP_400_BAD_REQUEST)
             
-            products_data = []
-            ingredients_data = {}
+            # Get brand names for Agent 4
+            brand_names = list(portfolios.values_list('name', flat=True))
             
-            for portfolio in portfolios:
-                for product in portfolio.products.all():
-                    products_data.append({
-                        'name': product.name,
-                        'description': product.description,
-                        'benefits': product.benefits,
-                        'category': product.category,
-                        'how_to_use': product.how_to_use
-                    })
-                    
-                    # Combine all ingredient sources for this product
-                    all_ingredients = []
-
-                    # Add PDF ingredients from the Product model
-                    if product.pdf_ingredients:
-                        all_ingredients.append(product.pdf_ingredients)
-
-                    # Add ingredients from the Ingredient table (API sources, etc)
-                    for ingredient in product.ingredients.all():
-                        if ingredient.ingredients_list:
-                            all_ingredients.append(ingredient.ingredients_list)
-
-                    if all_ingredients:
-                        combined = " | ".join(all_ingredients)  # Combine multiple sources
-                        ingredients_data[product.name] = combined
-            print(f"DEBUG: Total products: {len(products_data)}")
-            print(f"DEBUG: Products with ingredients:")
-            for name, ing in ingredients_data.items():
-                print(f"  - {name}: {ing[:60]}...")
-            print(f"DEBUG: Total ingredients: {len(ingredients_data)}")
-            answer, tokens_used = ask_gemini_question(
-                question=question,
-                products=products_data,
-                ingredients=ingredients_data,
-                brands=[p.name for p in portfolios]
+            # Import Agent 4
+            from .agents import Agent4Answerer
+            import os
+            
+            # Initialize Agent 4
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            answerer = Agent4Answerer(
+                chroma_db_path="/app/chroma_db",
+                openai_api_key=openai_api_key
             )
+            
+            print(f"🤖 Agent 4 answering question: {question}")
+            print(f"📚 Using brands: {brand_names}")
+            
+            # Use Agent 4 to answer
+            answer, products_used = answerer.answer_question(
+                question=question,
+                brand_names=brand_names,
+                top_k=5,
+                use_web_search=False  # Set to True if you want web search
+            )
+            
+            # Get product names
+            product_names = [p['metadata'].get('product', 'Unknown') for p in products_used]
             
             response_data = {
                 'answer': answer,
-                'brands_used': list(portfolios.values_list('name', flat=True)),
-                'products_referenced': [p['name'] for p in products_data],
-                'tokens_used': tokens_used
+                'brands_used': brand_names,
+                'products_referenced': product_names,
+                'tokens_used': len(question.split()) + len(answer.split())  # Rough estimate
             }
+            
+            print(f"✅ Agent 4 response: {len(answer)} chars, {len(products_used)} products used")
             
             serializer = QuestionResponseSerializer(response_data)
             return Response(serializer.data)
         
         except Exception as e:
+            import traceback
+            print(f"❌ Error in ask_question: {str(e)}")
+            traceback.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
