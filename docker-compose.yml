@@ -62,7 +62,8 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - uploads_volume:/app/uploads
+      - ./backend/tests/uploads:/app/uploads
+      - ./chroma_db:/app/chroma_db 
     networks:
       - dermacare_network
 
@@ -93,7 +94,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - uploads_volume:/app/uploads
+      - ./backend/tests/uploads:/app/uploads
     networks:
       - dermacare_network
 
@@ -131,7 +132,6 @@ services:
 
 volumes:
   postgres_volume:
-  uploads_volume:
   static_volume:
   media_volume:
 

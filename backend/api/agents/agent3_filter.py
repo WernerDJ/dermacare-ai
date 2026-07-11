@@ -7,6 +7,7 @@ import logging
 from typing import Dict, List
 from agents import trace
 import chromadb
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +23,20 @@ class Agent3Filter:
         self.db_path = chroma_db_path
         self.logger = logger
     
-    def filter_products(self, query: str, brand_names: List[str], top_k: int = 5) -> List[Dict]:
+    def search_products(self, query: str, brand_names: List[str], top_k: int = 5) -> List[Dict]:
         """
-        Filter products with relevance threshold
+        Search products based on user query across multiple brands
+        
+        Args:
+            query: User's question/search query
+            brand_names: List of brands to search in
+            top_k: Number of top results to return
+            
+        Returns:
+            List of relevant products with metadata
         """
         
-        with trace(f"Agent3: Filter - '{query}'"):
+        with trace(f"Agent3: Search - '{query}'"):
             all_results = []
             relevance_threshold = 2.0  # Only keep results with distance < 2.0
             
@@ -40,11 +49,13 @@ class Agent3Filter:
                     self.logger.warning(f"Collection not found: {collection_name}")
                     continue
                 
+                # Search in this collection
                 results = collection.query(
                     query_texts=[query],
                     n_results=top_k * 2  # Get more, then filter
                 )
                 
+                # Format results
                 if results['ids'] and len(results['ids']) > 0:
                     for i, doc_id in enumerate(results['ids'][0]):
                         distance = results['distances'][0][i] if 'distances' in results else 999
@@ -59,12 +70,14 @@ class Agent3Filter:
                                 "document": results['documents'][0][i] if 'documents' in results else ""
                             }
                             all_results.append(result)
+                
+                self.logger.info(f"Found {len(results['ids'][0]) if results['ids'] else 0} results in {brand_name}")
             
-            # Sort by relevance and return top_k
-            all_results.sort(key=lambda x: x['distance'])
+            # Sort by relevance (distance) and return top_k
+            all_results.sort(key=lambda x: x['distance'] if x['distance'] is not None else float('inf'))
             filtered_results = all_results[:top_k]
             
-            self.logger.info(f"Returned {len(filtered_results)} relevant results")
+            self.logger.info(f"Filtered to top {len(filtered_results)} results")
             
             return filtered_results
     
@@ -99,3 +112,24 @@ class Agent3Filter:
         brands = [col.name.replace("_", " ").title() for col in collections]
         
         return brands
+    
+    def get_collection_stats(self, brand_name: str) -> Dict:
+        """Get stats about a collection"""
+        
+        collection_name = brand_name.lower().replace(" ", "_")
+        
+        try:
+            collection = self.chroma_client.get_collection(name=collection_name)
+            count = collection.count()
+            
+            return {
+                "collection": collection_name,
+                "total_products": count,
+                "status": "ready"
+            }
+        except Exception as e:
+            return {
+                "collection": collection_name,
+                "status": "not_found",
+                "error": str(e)
+            }
