@@ -80,3 +80,19 @@ def analyze_portfolio_task(self, portfolio_id, pdf_path, lookup_ingredients=True
             'portfolio_id': portfolio_id,
             'error': str(e)
         }
+    # After vectorizer.vectorize_products() completes
+    # Create Django Product objects for the database
+
+    for idx, product in enumerate(products):
+        try:
+            Product.objects.create(
+                portfolio=portfolio,
+                name=product['product'],
+                description=product['benefits'] or '',
+                category=product['treatment_kind'] or 'General',
+                benefits=product['benefits'] or '',
+                how_to_use=product['usage'] or '',
+                pdf_ingredients=product.get('ingredients_enriched', product['ingredients'])
+            )
+        except Exception as e:
+            logger.warning(f"Error creating Product object: {str(e)}")

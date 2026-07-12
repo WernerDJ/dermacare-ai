@@ -15,7 +15,7 @@ from .serializers import (
     BrandPortfolioSerializer, BrandPortfolioListSerializer,
     BrandPortfolioDetailSerializer, ProductSerializer, IngredientSerializer,
     AnalysisTaskSerializer, UserSessionSerializer, QuestionRequestSerializer,
-    QuestionResponseSerializer, AnalysisInputSerializer
+    QuestionResponseSerializer, AnalysisInputSerializer, ProductIngredientsSerializer
 )
 from .permissions import IsAdmin, IsAdminOrReadOnly, IsOwnerOrAdmin
 from .tasks import analyze_portfolio_task
@@ -168,7 +168,7 @@ class BrandPortfolioViewSet(viewsets.ModelViewSet):
         return Response({'message': f'Portfolio {portfolio.name} deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
 
 
-class ProductViewSet(viewsets.ReadOnlyModelViewSet):
+class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
     
@@ -177,6 +177,104 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         if portfolio_id:
             return Product.objects.filter(portfolio_id=portfolio_id)
         return Product.objects.all()
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, IsAdmin])
+    def edit_ingredients(self, request):
+        """
+        Admin endpoint to manually edit product ingredients and re-vectorize
+        
+        POST /api/products/edit_ingredients/
+        {
+            "product_id": 1,
+            "ingredients": "Water, Glycerin, Hyaluronate, ...",
+            "notes": "Updated from supplier documentation"
+        }
+        """
+        
+        serializer = ProductIngredientsSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            product_id = serializer.validated_data['product_id']
+            new_ingredients = serializer.validated_data['ingredients']
+            notes = serializer.validated_data.get('notes', '')
+            
+            # Get product
+            try:
+                product = Product.objects.get(id=product_id)
+            except Product.DoesNotExist:
+                return Response(
+                    {"error": f"Product with ID {product_id} not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Log the change
+            old_ingredients = product.pdf_ingredients
+            print(f"🔧 Admin {request.user.username} editing ingredients for product {product.id}")
+            print(f"   Old: {old_ingredients[:100]}...")
+            print(f"   New: {new_ingredients[:100]}...")
+            
+            # Update product
+            product.pdf_ingredients = new_ingredients
+            product.save()
+            
+            # Re-vectorize in Chroma
+            print(f"🔄 Re-vectorizing product {product.id} in Chroma...")
+            
+            from .agents import Agent2Vectorizer
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            vectorizer = Agent2Vectorizer(
+                chroma_db_path="/app/chroma_db",
+                openai_api_key=openai_api_key
+            )
+            
+            # Get the brand from portfolio
+            brand_name = product.portfolio.name
+            
+            # Re-vectorize this single product
+            success = vectorizer.re_vectorize_product(
+                product_dict={
+                    'brand': brand_name,
+                    'product': product.name,
+                    'skin_type': product.category or 'All',
+                    'treatment_kind': product.category or 'General',
+                    'skin_problems': [],
+                    'body_parts': ['Face'],
+                    'ingredients': new_ingredients,
+                    'usage': product.how_to_use or '',
+                    'benefits': product.benefits or ''
+                },
+                brand_name=brand_name,
+                product_index=product.id
+            )
+            
+            if success:
+                return Response({
+                    "success": True,
+                    "message": f"Product ingredients updated and re-vectorized successfully",
+                    "product_id": product.id,
+                    "product_name": product.name,
+                    "brand": brand_name,
+                    "new_ingredients": new_ingredients[:200] + "...",
+                    "admin": request.user.username,
+                    "timestamp": timezone.now().isoformat()
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    "success": False,
+                    "message": "Product updated but re-vectorization failed",
+                    "product_id": product.id
+                }, status=status.HTTP_206_PARTIAL_CONTENT)
+            
+        except Exception as e:
+            import traceback
+            print(f"❌ Error editing ingredients: {str(e)}")
+            traceback.print_exc()
+            return Response(
+                {"error": f"Error updating ingredients: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class IngredientViewSet(viewsets.ReadOnlyModelViewSet):

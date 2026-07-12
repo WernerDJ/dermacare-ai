@@ -80,3 +80,16 @@ class QuestionResponseSerializer(serializers.Serializer):
     brands_used = serializers.ListField(child=serializers.CharField())
     products_referenced = serializers.ListField(child=serializers.CharField())
     tokens_used = serializers.IntegerField()
+
+class ProductIngredientsSerializer(serializers.Serializer):
+    """Serializer for admin to manually edit product ingredients"""
+    
+    product_id = serializers.IntegerField()
+    ingredients = serializers.CharField(max_length=5000)
+    notes = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    
+    def validate_ingredients(self, value):
+        """Validate ingredients aren't empty"""
+        if not value or len(value.strip()) < 3:
+            raise serializers.ValidationError("Ingredients must not be empty")
+        return value

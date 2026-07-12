@@ -210,3 +210,60 @@ class Agent2Vectorizer:
                 "status": "not_found",
                 "error": str(e)
             }
+    def re_vectorize_product(self, product_dict: Dict, brand_name: str, product_index: int) -> bool:
+        """
+        Re-vectorize a single product (for admin ingredient edits)
+        
+        Args:
+            product_dict: Product data with updated ingredients
+            brand_name: Brand name
+            product_index: Product ID for doc_id
+            
+        Returns:
+            True if successful
+        """
+        
+        with trace(f"Agent2: Re-vectorize - {product_dict['product']}"):
+            try:
+                collection_name = brand_name.lower().replace(" ", "_")
+                collection = self.chroma_client.get_or_create_collection(
+                    name=collection_name,
+                    metadata={"brand": brand_name}
+                )
+                
+                # Create document
+                doc_id = f"{brand_name}_{product_index}_{product_dict['product'].replace(' ', '_')}"
+                metadata = {
+                    "brand": product_dict['brand'],
+                    "product": product_dict['product'],
+                    "skin_type": product_dict['skin_type'],
+                    "treatment_kind": product_dict['treatment_kind'],
+                    "skin_problems": json.dumps(product_dict.get('skin_problems', [])),
+                    "body_parts": json.dumps(product_dict.get('body_parts', ['Face'])),
+                    "ingredients": product_dict['ingredients'],
+                    "usage": product_dict['usage'],
+                    "benefits": product_dict['benefits']
+                }
+                
+                # Create searchable text
+                searchable_text = self._create_searchable_text(product_dict)
+                
+                # Update in Chroma (delete old, add new)
+                try:
+                    collection.delete(ids=[doc_id])
+                except:
+                    pass  # Product might not exist yet
+                
+                # Add updated version
+                collection.add(
+                    ids=[doc_id],
+                    documents=[searchable_text],
+                    metadatas=[metadata]
+                )
+                
+                self.logger.info(f"Re-vectorized: {product_dict['product']}")
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"Re-vectorization failed: {str(e)}")
+                return False
