@@ -137,8 +137,8 @@ function AdminPanel({ token, onLogout }) {
               <label htmlFor="pdf-file">PDF File</label>
               <input
                 type="file"
-                id="pdf-file"
-                accept="application/pdf"
+                id="document-file"
+                accept=".pdf,.docx,.txt"
                 onChange={handleFileChange}
                 required
               />
