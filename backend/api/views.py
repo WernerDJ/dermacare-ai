@@ -140,9 +140,6 @@ class BrandPortfolioViewSet(viewsets.ModelViewSet):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-
-
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsAdmin])
     def analysis_tasks(self, request):
         tasks = AnalysisTask.objects.all().order_by('-created_date')
@@ -157,15 +154,33 @@ class BrandPortfolioViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['delete'], permission_classes=[IsAuthenticated, IsAdmin])
     def delete_portfolio(self, request):
+        """Delete a portfolio by ID"""
         portfolio_id = request.query_params.get('portfolio_id')
         
         if not portfolio_id:
-            return Response({'error': 'portfolio_id parameter required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'portfolio_id parameter required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        portfolio = get_object_or_404(BrandPortfolio, id=portfolio_id)
-        portfolio.delete()
-        
-        return Response({'message': f'Portfolio {portfolio.name} deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+        try:
+            portfolio = BrandPortfolio.objects.get(id=portfolio_id)
+            portfolio.delete()
+            return Response(
+                {'message': f'Portfolio {portfolio.name} deleted successfully'},
+                status=status.HTTP_204_NO_CONTENT
+            )
+        except BrandPortfolio.DoesNotExist:
+            return Response(
+                {'error': f'Portfolio {portfolio_id} not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 
 class ProductViewSet(viewsets.ModelViewSet):

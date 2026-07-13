@@ -12,10 +12,6 @@ def analyze_portfolio_task(self, portfolio_id, pdf_path, lookup_ingredients=True
     """Analyze portfolio using Agent 1 + Agent 2"""
     
     portfolio = BrandPortfolio.objects.get(id=portfolio_id)
-    task = AnalysisTask.objects.create(
-        portfolio=portfolio,
-        status='processing'
-    )
     
     try:
         # AGENT 1: Extract products
