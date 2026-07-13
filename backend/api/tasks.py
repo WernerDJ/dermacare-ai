@@ -49,10 +49,11 @@ def analyze_portfolio_task(self, portfolio_id, pdf_path, lookup_ingredients=True
         print(f"✅ Enriched {enriched_count}/{len(products)} products")
         
         # Update task status
-        task.status = 'completed'
-        task.completed_at = timezone.now()
-        task.product_count = stored_count
-        task.save()
+        analysis_task = AnalysisTask.objects.get(task_id=self.request.id)
+        analysis_task.status = 'completed'
+        analysis_task.completed_at = timezone.now()
+        analysis_task.product_count = stored_count
+        analysis_task.save()
         
         return {
             'status': 'success',
@@ -67,9 +68,10 @@ def analyze_portfolio_task(self, portfolio_id, pdf_path, lookup_ingredients=True
         import traceback
         traceback.print_exc()
         
-        task.status = 'failed'
-        task.error_message = str(e)
-        task.save()
+        analysis_task = AnalysisTask.objects.get(task_id=self.request.id)
+        analysis_task.status = 'failed'
+        analysis_task.error_message = str(e)
+        analysis_task.save()
         
         return {
             'status': 'error',
