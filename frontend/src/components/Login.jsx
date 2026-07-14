@@ -86,12 +86,6 @@ function Login({ onLogin }) {
           </button>
         </form>
 
-        <div className="login-info">
-          <p>Demo credentials:</p>
-          <p>Username: <code>Voldemort</code></p>
-          <p>Password: <code>Pi#31415926</code></p>
-        </div>
-
         <div style={{ 
           textAlign: 'center', marginTop: '30px', fontSize: '14px',
           color: '#666', paddingTop: '20px', borderTop: '1px solid #ddd'
