@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import Login from './components/Login';
-import SignUp from './components/SignUp';
-import AdminPanel from './components/AdminPanel';
-import UserDashboard from './components/UserDashboard';
-import './App.css';
+import Login from './Login';
+import SignUp from './SignUp';
+import AdminPanel from './AdminPanel';
+import UserDashboard from './UserDashboard';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));

@@ -12,12 +12,13 @@ function AdminPanel({ token, onLogout }) {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    if (!token) return;  // Don't load if no token
+    
     loadPortfolios();
     loadTasks();
     const interval = setInterval(loadTasks, 5000);
     return () => clearInterval(interval);
-  }, []);
-
+  }, [token]);  // Re-run when token changes
   const loadPortfolios = async () => {
     try {
       const response = await fetch('/api/portfolios/analysis_tasks/', {
