@@ -1,388 +1,275 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.views.decorators.csrf import csrf_exempt  # modify - added
-from django.shortcuts import get_object_or_404
-from django.utils import timezone
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
-from rest_framework.authtoken.models import Token
-import tempfile
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib import messages
+from django.http import JsonResponse
+from django.conf import settings  
+import logging
+from django.views.decorators.http import require_POST
+import uuid
 import os
+from pathlib import Path
 
-from .models import BrandPortfolio, Product, Ingredient, AnalysisTask, UserSession
-from .serializers import (
-    BrandPortfolioSerializer, BrandPortfolioListSerializer,
-    BrandPortfolioDetailSerializer, ProductSerializer, IngredientSerializer,
-    AnalysisTaskSerializer, UserSessionSerializer, QuestionRequestSerializer,
-    QuestionResponseSerializer, AnalysisInputSerializer, ProductIngredientsSerializer
-)
-from .permissions import IsAdmin, IsAdminOrReadOnly, IsOwnerOrAdmin
+from .models import BrandPortfolio, Product, AnalysisTask
 from .tasks import analyze_portfolio_task
-from .agents import Agent4Answerer
+from .agents import Agent3Filter, Agent4Answerer
 
+logger = logging.getLogger(__name__)
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def check_user_admin_status(request):
-    """Check if current user is admin/staff"""
-    return Response({
-        'is_admin': request.user.is_staff,
-        'username': request.user.username,
-        'email': request.user.email
-    })
+# Auth helpers
+def is_admin(user):
+    return user.is_staff
 
-# modify # - Disable CSRF for public registration endpoint
-@csrf_exempt
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def register_user(request):
-    """Register a new user"""
-    username = request.data.get('username')
-    email = request.data.get('email')
-    password = request.data.get('password')
-    password_confirm = request.data.get('password_confirm')
+# ============ AUTH VIEWS ============
 
-    if not all([username, email, password, password_confirm]):
-        return Response({'error': 'All fields are required'}, status=status.HTTP_400_BAD_REQUEST)
+def login_view(request):
+    """Login page"""
+    import logging
+    logger = logging.getLogger(__name__)
+    #
+    logger.info(f"🔍 Login request method: {request.method}")
+    logger.info(f"🔍 CSRF token in request: {request.POST.get('csrfmiddlewaretoken', 'MISSING')[:20]}")
+    logger.info(f"🔍 CSRF cookie: {request.COOKIES.get('csrftoken', 'MISSING')[:20]}")
+    logger.info(f"🔍 Allowed origins: {settings.CSRF_TRUSTED_ORIGINS}")
+    #
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        logger.info(f"🔍 Login attempt: username={username}")
 
-    if password != password_confirm:
-        return Response({'error': 'Passwords do not match'}, status=status.HTTP_400_BAD_REQUEST)
-
-    if len(password) < 8:
-        return Response({'error': 'Password must be at least 8 characters'}, status=status.HTTP_400_BAD_REQUEST)
-
-    if User.objects.filter(username=username).exists():
-        return Response({'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
-
-    if User.objects.filter(email=email).exists():
-        return Response({'error': 'Email already exists'}, status=status.HTTP_400_BAD_REQUEST)
-
-    try:
-        user = User.objects.create_user(username=username, email=email, password=password)
-        token, created = Token.objects.get_or_create(user=user)
-        return Response({'token': token.key, 'username': user.username, 'email': user.email}, status=status.HTTP_201_CREATED)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-# modify #
-
-
-class BrandPortfolioViewSet(viewsets.ModelViewSet):
-    serializer_class = BrandPortfolioSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
-    
-    def get_queryset(self):
-        return BrandPortfolio.objects.all()
-    
-    def get_serializer_class(self):
-        if self.action == 'list':
-            return BrandPortfolioListSerializer
-        elif self.action == 'retrieve':
-            return BrandPortfolioDetailSerializer
-        return BrandPortfolioSerializer
-    
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
-    
-    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, IsAdmin])
-    def upload_and_analyze(self, request):
-        import uuid
-        import os
+        user = authenticate(request, username=username, password=password)
         
+        if user is not None:
+            login(request, user)
+            if user.is_staff:
+                return redirect('admin_panel')
+            return redirect('user_dashboard')
+        else:
+            logger.warning(f"❌ Login failed for {username}")
+            messages.error(request, 'Invalid username or password')
+    
+    return render(request, 'login.html')
+
+def signup_view(request):
+    """Signup page"""
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        email = request.POST.get('email')
+        password = request.POST.get('password')
+        password2 = request.POST.get('password2')
+        
+        if password != password2:
+            messages.error(request, 'Passwords do not match')
+            return render(request, 'signup.html')
+        
+        if User.objects.filter(username=username).exists():
+            messages.error(request, 'Username already taken')
+            return render(request, 'signup.html')
+        
+        if User.objects.filter(email=email).exists():
+            messages.error(request, 'Email already registered')
+            return render(request, 'signup.html')
+        
+        user = User.objects.create_user(username=username, email=email, password=password)
+        login(request, user)
+        messages.success(request, 'Account created successfully!')
+        return redirect('user_dashboard')
+    
+    return render(request, 'signup.html')
+
+def logout_view(request):
+    """Logout"""
+    logout(request)
+    messages.success(request, 'Logged out successfully')
+    return redirect('login')
+
+# ============ ADMIN VIEWS ============
+
+@login_required(login_url='login')
+@user_passes_test(is_admin)
+def admin_panel(request):
+    """Admin panel for uploading portfolios"""
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'upload':
+            return handle_portfolio_upload(request)
+        elif action == 'delete':
+            return handle_portfolio_delete(request)
+    
+    # GET: Show form and existing data
+    portfolios = BrandPortfolio.objects.all().order_by('-created_date')
+    tasks = AnalysisTask.objects.all().order_by('-created_date')[:10]
+    
+    context = {
+        'portfolios': portfolios,
+        'tasks': tasks,
+    }
+    
+    return render(request, 'admin_panel.html', context)
+
+def handle_portfolio_upload(request):
+    """Handle portfolio file upload and analysis"""
+    
+    brand_name = request.POST.get('brand_name', '').strip()
+    product_names_text = request.POST.get('product_names', '').strip()
+    document = request.FILES.get('document')
+    lookup_ingredients = request.POST.get('lookup_ingredients') == 'on'
+    
+    # Validate
+    if not brand_name:
+        messages.error(request, 'Brand name is required')
+        return redirect('admin_panel')
+    
+    if not document:
+        messages.error(request, 'Document is required')
+        return redirect('admin_panel')
+    
+    product_names = [p.strip() for p in product_names_text.split('\n') if p.strip()]
+    if not product_names:
+        messages.error(request, 'Please enter at least one product name')
+        return redirect('admin_panel')
+    
+    try:
+        # Create portfolio
+        portfolio = BrandPortfolio.objects.create(
+            name=brand_name,
+            created_by=request.user
+        )
+        
+        # Save document
         UPLOAD_DIR = '/app/uploads'
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         
-        serializer = AnalysisInputSerializer(data=request.data)
+        filename = f"{uuid.uuid4()}_{document.name}"
+        doc_path = os.path.join(UPLOAD_DIR, filename)
         
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        with open(doc_path, 'wb') as f:
+            for chunk in document.chunks():
+                f.write(chunk)
         
-        try:
-            portfolio = BrandPortfolio.objects.create(
-                name=serializer.validated_data['brand_name'],
-                description=serializer.validated_data.get('description', ''),
-                created_by=request.user
-            )
-            
-            pdf_file = serializer.validated_data['pdf_file']
-            
-            # Save to persistent directory (not /tmp)
-            filename = f"{uuid.uuid4()}_{pdf_file.name}"
-            pdf_path = os.path.join(UPLOAD_DIR, filename)
-            
-            with open(pdf_path, 'wb') as f:
-                for chunk in pdf_file.chunks():
-                    f.write(chunk)
-            
-            print(f"✅ PDF saved: {pdf_path}")
-            
-            task = analyze_portfolio_task.delay(
-                portfolio_id=portfolio.id,
-                pdf_path=pdf_path,
-                lookup_ingredients=serializer.validated_data['lookup_ingredients']
-            )
-            
-            analysis_task = AnalysisTask.objects.create(
-                task_id=task.id,
-                portfolio=portfolio,
-                status='pending'
-            )
-            
-            return Response({
-                'portfolio_id': portfolio.id,
-                'task_id': task.id,
-                'status': 'started',
-                'message': f'Analysis started for {portfolio.name}'
-            }, status=status.HTTP_202_ACCEPTED)
+        # Start Celery task - use pdf_path instead of document_path
+        task = analyze_portfolio_task.delay(
+            portfolio_id=portfolio.id,
+            document_path=doc_path,  # Changed from pdf_path
+            brand_name=brand_name,
+            product_names=product_names,
+            lookup_ingredients=lookup_ingredients
+        )
         
-        except Exception as e:
-            print(f"❌ Error: {str(e)}")
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsAdmin])
-    def analysis_tasks(self, request):
-        tasks = AnalysisTask.objects.all().order_by('-created_date')
-        serializer = AnalysisTaskSerializer(tasks, many=True)
-        return Response(serializer.data)
+        AnalysisTask.objects.create(
+            task_id=task.id,
+            portfolio=portfolio,    
+            status='pending',
+            product_count=len(product_names)
+        )
+        
+        messages.success(request, f'Analysis started for {len(product_names)} products')
+        return redirect('admin_panel')
     
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
-    def list_portfolios(self, request):
-        portfolios = BrandPortfolio.objects.all()
-        serializer = BrandPortfolioListSerializer(portfolios, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['delete'], permission_classes=[IsAuthenticated, IsAdmin])
-    def delete_portfolio(self, request):
-        """Delete a portfolio by ID"""
-        portfolio_id = request.query_params.get('portfolio_id')
-        
-        if not portfolio_id:
-            return Response(
-                {'error': 'portfolio_id parameter required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        try:
-            portfolio = BrandPortfolio.objects.get(id=portfolio_id)
-            portfolio.delete()
-            return Response(
-                {'message': f'Portfolio {portfolio.name} deleted successfully'},
-                status=status.HTTP_204_NO_CONTENT
-            )
-        except BrandPortfolio.DoesNotExist:
-            return Response(
-                {'error': f'Portfolio {portfolio_id} not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+    except Exception as e:
+        messages.error(request, f'Error: {str(e)}')
+        return redirect('admin_panel')
 
-
-
-class ProductViewSet(viewsets.ModelViewSet):
-    serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated]
+def handle_portfolio_delete(request):
+    """Handle portfolio deletion"""
     
-    def get_queryset(self):
-        portfolio_id = self.request.query_params.get('portfolio_id')
-        if portfolio_id:
-            return Product.objects.filter(portfolio_id=portfolio_id)
-        return Product.objects.all()
+    portfolio_id = request.POST.get('portfolio_id')
     
-    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, IsAdmin])
-    def edit_ingredients(self, request):
-        """
-        Admin endpoint to manually edit product ingredients and re-vectorize
+    try:
+        portfolio = get_object_or_404(BrandPortfolio, id=portfolio_id)
+        portfolio.delete()
+        messages.success(request, f'Portfolio "{portfolio.name}" deleted')
+    except Exception as e:
+        messages.error(request, f'Error deleting portfolio: {str(e)}')
+    
+    return redirect('admin_panel')
+
+# ============ USER VIEWS ============
+
+@login_required(login_url='login')
+def user_dashboard(request):
+    """User dashboard for asking questions"""
+    
+    answer = None
+    brands_used = []
+    products_referenced = []
+    tokens_used = 0
+    
+    if request.method == 'POST':
+        question = request.POST.get('question', '').strip()
+        brand_ids = request.POST.getlist('brand_ids')
         
-        POST /api/products/edit_ingredients/
-        {
-            "product_id": 1,
-            "ingredients": "Water, Glycerin, Hyaluronate, ...",
-            "notes": "Updated from supplier documentation"
-        }
-        """
-        
-        serializer = ProductIngredientsSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            product_id = serializer.validated_data['product_id']
-            new_ingredients = serializer.validated_data['ingredients']
-            notes = serializer.validated_data.get('notes', '')
-            
-            # Get product
+        if not question:
+            messages.error(request, 'Please ask a question')
+        elif not brand_ids:
+            messages.error(request, 'Please select at least one brand')
+        else:
             try:
-                product = Product.objects.get(id=product_id)
-            except Product.DoesNotExist:
-                return Response(
-                    {"error": f"Product with ID {product_id} not found"},
-                    status=status.HTTP_404_NOT_FOUND
+                answer, brands_used, products_referenced, tokens_used = get_ai_response(
+                    question=question,
+                    brand_ids=brand_ids
                 )
-            
-            # Log the change
-            old_ingredients = product.pdf_ingredients
-            print(f"🔧 Admin {request.user.username} editing ingredients for product {product.id}")
-            print(f"   Old: {old_ingredients[:100]}...")
-            print(f"   New: {new_ingredients[:100]}...")
-            
-            # Update product
-            product.pdf_ingredients = new_ingredients
-            product.save()
-            
-            # Re-vectorize in Chroma
-            print(f"🔄 Re-vectorizing product {product.id} in Chroma...")
-            
-            from .agents import Agent2Vectorizer
-            openai_api_key = os.getenv("OPENAI_API_KEY")
-            vectorizer = Agent2Vectorizer(
-                chroma_db_path="/app/chroma_db",
-                openai_api_key=openai_api_key
-            )
-            
-            # Get the brand from portfolio
-            brand_name = product.portfolio.name
-            
-            # Re-vectorize this single product
-            success = vectorizer.re_vectorize_product(
-                product_dict={
-                    'brand': brand_name,
-                    'product': product.name,
-                    'skin_type': product.category or 'All',
-                    'treatment_kind': product.category or 'General',
-                    'skin_problems': [],
-                    'body_parts': ['Face'],
-                    'ingredients': new_ingredients,
-                    'usage': product.how_to_use or '',
-                    'benefits': product.benefits or ''
-                },
-                brand_name=brand_name,
-                product_index=product.id
-            )
-            
-            if success:
-                return Response({
-                    "success": True,
-                    "message": f"Product ingredients updated and re-vectorized successfully",
-                    "product_id": product.id,
-                    "product_name": product.name,
-                    "brand": brand_name,
-                    "new_ingredients": new_ingredients[:200] + "...",
-                    "admin": request.user.username,
-                    "timestamp": timezone.now().isoformat()
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    "success": False,
-                    "message": "Product updated but re-vectorization failed",
-                    "product_id": product.id
-                }, status=status.HTTP_206_PARTIAL_CONTENT)
-            
-        except Exception as e:
-            import traceback
-            print(f"❌ Error editing ingredients: {str(e)}")
-            traceback.print_exc()
-            return Response(
-                {"error": f"Error updating ingredients: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-
-class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = IngredientSerializer
-    permission_classes = [IsAuthenticated]
+                if not answer:
+                    messages.warning(request, 'No products found matching your criteria')
+            except Exception as e:
+                messages.error(request, f'Error: {str(e)}')
     
-    def get_queryset(self):
-        product_id = self.request.query_params.get('product_id')
-        if product_id:
-            return Ingredient.objects.filter(product_id=product_id)
-        return Ingredient.objects.all()
-
-
-class UserSessionViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
+    portfolios = BrandPortfolio.objects.all()
     
-    @action(detail=False, methods=['get', 'post'])
-    def selected_brands(self, request):
-        session, created = UserSession.objects.get_or_create(user=request.user)
-        
-        if request.method == 'GET':
-            serializer = UserSessionSerializer(session)
-            return Response(serializer.data)
-        
-        elif request.method == 'POST':
-            brand_ids = request.data.get('brand_ids', [])
-            session.selected_portfolios.set(brand_ids)
-            session.save()
-            serializer = UserSessionSerializer(session)
-            return Response(serializer.data)
+    context = {
+        'portfolios': portfolios,
+        'answer': answer,
+        'brands_used': brands_used,
+        'products_referenced': products_referenced,
+        'tokens_used': tokens_used,
+    }
+    
+    return render(request, 'user_dashboard.html', context)
 
-    @action(detail=False, methods=['post'])
-    def ask_question(self, request):
-        serializer = QuestionRequestSerializer(data=request.data)
-        
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            question = serializer.validated_data['question']
-            brand_ids = serializer.validated_data.get('brand_ids', [])
-            
-            if not brand_ids:
-                session, _ = UserSession.objects.get_or_create(user=request.user)
-                brand_ids = list(session.selected_portfolios.values_list('id', flat=True))
-            
-            portfolios = BrandPortfolio.objects.filter(id__in=brand_ids)
-            
-            if not portfolios.exists():
-                return Response({'error': 'No portfolios selected'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Get brand names for Agent 4
-            brand_names = list(portfolios.values_list('name', flat=True))
-            
-            # Import Agent 4
-            from .agents import Agent4Answerer
-            import os
-            
-            # Initialize Agent 4
-            openai_api_key = os.getenv("OPENAI_API_KEY")
-            answerer = Agent4Answerer(
-                chroma_db_path="/app/chroma_db",
-                openai_api_key=openai_api_key
-            )
-            
-            print(f"🤖 Agent 4 answering question: {question}")
-            print(f"📚 Using brands: {brand_names}")
-            
-            # Use Agent 4 to answer
-            answer, products_used = answerer.answer_question(
-                question=question,
-                brand_names=brand_names,
-                top_k=5,
-                use_web_search=False  # Set to True if you want web search
-            )
-            
-            # Get product names
-            product_names = [p['metadata'].get('product', 'Unknown') for p in products_used]
-            
-            response_data = {
-                'answer': answer,
-                'brands_used': brand_names,
-                'products_referenced': product_names,
-                'tokens_used': len(question.split()) + len(answer.split())  # Rough estimate
-            }
-            
-            print(f"✅ Agent 4 response: {len(answer)} chars, {len(products_used)} products used")
-            
-            serializer = QuestionResponseSerializer(response_data)
-            return Response(serializer.data)
-        
-        except Exception as e:
-            import traceback
-            print(f"❌ Error in ask_question: {str(e)}")
-            traceback.print_exc()
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+def get_ai_response(question, brand_ids):
+    """Get AI response using Agent 3 + 4"""
+    
+    # Get brand names
+    portfolios = BrandPortfolio.objects.filter(id__in=brand_ids)
+    brand_names = list(portfolios.values_list('name', flat=True))
+    
+    if not brand_names:
+        return None, [], [], 0
+    
+    # Agent 3: Filter products
+    agent3 = Agent3Filter(chroma_db_path="/app/chroma_db")
+    filtered_products = agent3.search_products(question, brand_names, top_k=5)
+    
+    if not filtered_products:
+        return None, brand_names, [], 0
+    
+    # Format for Agent 4
+    formatted_products = agent3.format_for_agent4(filtered_products)
+    
+    # Agent 4: Generate answer
+    agent4 = Agent4Answerer(api_key=os.getenv("OPENAI_API_KEY"))
+    answer = agent4.answer_question(question, formatted_products)
+    
+    # Extract product names for display
+    products_referenced = [p.get('product', 'Unknown') for p in filtered_products if p.get('product')]
+    
+    return answer, brand_names, products_referenced, 0
+
+# ============ API ENDPOINTS (for future use) ============
+
+@login_required
+def api_task_status(request, task_id):
+    """Get task status (for AJAX polling if needed)"""
+    
+    task = get_object_or_404(AnalysisTask, task_id=task_id)
+    
+    return JsonResponse({
+        'status': task.status,
+        'progress': task.progress,
+        'current_step': task.current_step,
+        'error_message': task.error_message,
+        'product_count': task.product_count,
+    })

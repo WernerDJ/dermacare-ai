@@ -59,14 +59,13 @@ class UserSessionSerializer(serializers.ModelSerializer):
         model = UserSession
         fields = ['id', 'selected_portfolios', 'updated_date']
 
-
 class AnalysisInputSerializer(serializers.Serializer):
-    """For PDF upload and analysis"""
+    """For document upload with manual product list"""
     brand_name = serializers.CharField(max_length=255)
-    pdf_file = serializers.FileField()
+    product_names = serializers.CharField()  # One per line
+    document = serializers.FileField()
     lookup_ingredients = serializers.BooleanField(default=True)
-    description = serializers.CharField(required=False, allow_blank=True)
-
+    
 
 class QuestionRequestSerializer(serializers.Serializer):
     """User question input"""

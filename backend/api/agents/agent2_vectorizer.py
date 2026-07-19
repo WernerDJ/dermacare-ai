@@ -29,21 +29,14 @@ class Agent2Vectorizer:
         self.db_path = chroma_db_path
         self.logger = logger
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
-    
+
+
     def vectorize_products(self, products: List[Dict], brand_name: str) -> Tuple[int, List[Dict]]:
-        """
-        Vectorize and store products in Chroma
+        """Vectorize and store products in Chroma AND Django database"""
+        from api.models import Product  # Import at top of method
         
-        Args:
-            products: List of products from Agent 1
-            brand_name: Brand name (for collection naming)
-            
-        Returns:
-            (products_stored, enrichment_log)
-        """
         enrichment_log = []
         
-        # Create or get collection
         collection_name = brand_name.lower().replace(" ", "_")
         collection = self.chroma_client.get_or_create_collection(
             name=collection_name,
@@ -52,14 +45,12 @@ class Agent2Vectorizer:
         
         self.logger.info(f"Using collection: {collection_name}")
         
-        # Process each product
         for idx, product in enumerate(products):
             with trace(f"Process: {product['product']}"):
                 # Check if ingredients need enrichment
                 ingredient_count = len(product['ingredients'].split(','))
                 
                 if ingredient_count < 7:
-                    # Enrich ingredients
                     enriched, source = self._enrich_ingredients(product)
                     if enriched:
                         product['ingredients_enriched'] = enriched
@@ -75,14 +66,13 @@ class Agent2Vectorizer:
                             "enriched": False,
                             "reason": "No enrichment found"
                         })
-
                 else:
                     enrichment_log.append({
                         "product": product['product'],
                         "enriched": False,
                         "reason": "Enough ingredients already"
                     })
-
+                
                 # Create document for storage
                 doc_id = f"{brand_name}_{idx}_{product['product'].replace(' ', '_')}"
                 metadata = {
@@ -92,12 +82,14 @@ class Agent2Vectorizer:
                     "treatment_kind": product['treatment_kind'],
                     "skin_problems": json.dumps(product['skin_problems']),
                     "body_parts": json.dumps(product['body_parts']),
+                    "life_stage": product.get('life_stage', 'Unknown'),
+                    "gender": product.get('gender', 'Unknown'),
                     "ingredients": product.get('ingredients_enriched', product['ingredients']),
                     "usage": product['usage'],
                     "benefits": product['benefits']
                 }
                 
-                # Create searchable text
+                # Create searchable text (includes new fields)
                 searchable_text = self._create_searchable_text(product)
                 
                 # Store in Chroma
@@ -109,7 +101,55 @@ class Agent2Vectorizer:
                 
                 self.logger.info(f"Stored: {product['product']}")
         
+        # ✅ NEW: Save products to Django database AFTER Chroma storage
+        from django.utils import timezone
+        portfolio = None
+        
+        try:
+            from api.models import BrandPortfolio
+            portfolio = BrandPortfolio.objects.get(name=brand_name)
+            
+            for product in products:
+                Product.objects.create(
+                    portfolio=portfolio,
+                    name=product.get('product', 'Unknown'),
+                    description=product.get('benefits', ''),
+                    category=product.get('treatment_kind', ''),
+                    benefits=product.get('benefits', ''),
+                    how_to_use=product.get('usage', ''),
+                    pdf_ingredients=product.get('ingredients_enriched', product.get('ingredients', '')),
+                    skin_type=product.get('skin_type', 'all'),
+                    treatment_kind=product.get('treatment_kind', ''),
+                    life_stage=product.get('life_stage', 'all'),
+                    gender=product.get('gender', 'unisex'),
+                )
+            
+            self.logger.info(f"✅ Saved {len(products)} products to database")
+        except Exception as e:
+            self.logger.error(f"❌ Error saving to database: {str(e)}")
+        
         return len(products), enrichment_log
+
+
+
+
+    def _create_searchable_text(self, product: Dict) -> str:
+        """Create searchable text from product metadata"""
+        
+        parts = [
+            product['product'],
+            product['skin_type'],
+            product['treatment_kind'],
+            ', '.join(product['skin_problems']),
+            ', '.join(product['body_parts']),
+            product.get('life_stage', 'Unknown'),
+            product.get('gender', 'Unknown'),
+            product['ingredients'],
+            product['benefits'],
+            product['usage']
+        ]
+        
+        return ' | '.join(parts)
 
     def _enrich_ingredients(self, product: Dict) -> Tuple[str, str]:
         """Enrich ingredients using scrapers"""
@@ -210,18 +250,9 @@ class Agent2Vectorizer:
                 "status": "not_found",
                 "error": str(e)
             }
+
     def re_vectorize_product(self, product_dict: Dict, brand_name: str, product_index: int) -> bool:
-        """
-        Re-vectorize a single product (for admin ingredient edits)
-        
-        Args:
-            product_dict: Product data with updated ingredients
-            brand_name: Brand name
-            product_index: Product ID for doc_id
-            
-        Returns:
-            True if successful
-        """
+        """Re-vectorize a single product (for admin ingredient edits)"""
         
         with trace(f"Agent2: Re-vectorize - {product_dict['product']}"):
             try:
@@ -231,7 +262,6 @@ class Agent2Vectorizer:
                     metadata={"brand": brand_name}
                 )
                 
-                # Create document
                 doc_id = f"{brand_name}_{product_index}_{product_dict['product'].replace(' ', '_')}"
                 metadata = {
                     "brand": product_dict['brand'],
@@ -240,21 +270,20 @@ class Agent2Vectorizer:
                     "treatment_kind": product_dict['treatment_kind'],
                     "skin_problems": json.dumps(product_dict.get('skin_problems', [])),
                     "body_parts": json.dumps(product_dict.get('body_parts', ['Face'])),
+                    "life_stage": product_dict.get('life_stage', 'Unknown'),
+                    "gender": product_dict.get('gender', 'Unknown'),
                     "ingredients": product_dict['ingredients'],
                     "usage": product_dict['usage'],
                     "benefits": product_dict['benefits']
                 }
                 
-                # Create searchable text
                 searchable_text = self._create_searchable_text(product_dict)
                 
-                # Update in Chroma (delete old, add new)
                 try:
                     collection.delete(ids=[doc_id])
                 except:
-                    pass  # Product might not exist yet
+                    pass
                 
-                # Add updated version
                 collection.add(
                     ids=[doc_id],
                     documents=[searchable_text],

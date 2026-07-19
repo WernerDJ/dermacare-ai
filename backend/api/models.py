@@ -23,11 +23,35 @@ class BrandPortfolio(models.Model):
     
     def __str__(self):
         return self.name
-
+        
 class Product(models.Model):
     """
     Individual product within a brand portfolio
     """
+    LIFE_STAGE_CHOICES = [
+        ('babies', 'Babies'),
+        ('children', 'Children'),
+        ('teenagers', 'Teenagers'),
+        ('adults', 'Adults'),
+        ('menopausal', 'Menopausal'),
+        ('post_menopausal', 'Post-Menopausal'),
+        ('all', 'All Ages'),
+    ]
+    
+    GENDER_CHOICES = [
+        ('men', 'Men'),
+        ('women', 'Women'),
+        ('unisex', 'Unisex'),
+    ]
+    
+    SKIN_TYPE_CHOICES = [
+        ('all', 'All'),
+        ('dry', 'Dry'),
+        ('oily', 'Oily'),
+        ('sensitive', 'Sensitive'),
+        ('combination', 'Combination'),
+    ]
+    
     portfolio = models.ForeignKey(BrandPortfolio, on_delete=models.CASCADE, related_name='products')
     name = models.CharField(max_length=500)
     description = models.TextField(blank=True)
@@ -35,6 +59,15 @@ class Product(models.Model):
     benefits = models.TextField(blank=True)
     how_to_use = models.TextField(blank=True)
     pdf_ingredients = models.TextField(blank=True, help_text="Ingredients found in PDF")
+    
+    # New fields from Agent 1
+    skin_type = models.CharField(max_length=50, choices=SKIN_TYPE_CHOICES, default='all')
+    treatment_kind = models.CharField(max_length=100, blank=True)
+    life_stage = models.CharField(max_length=50, choices=LIFE_STAGE_CHOICES, default='all')
+    gender = models.CharField(max_length=20, choices=GENDER_CHOICES, default='unisex')
+    
+    created_date = models.DateTimeField(auto_now_add=True)
+    updated_date = models.DateTimeField(auto_now=True)
     
     class Meta:
         unique_together = ('portfolio', 'name')
@@ -46,7 +79,6 @@ class Product(models.Model):
 class Ingredient(models.Model):
     """
     Ingredients for a product (from multiple sources: PDF, APIs, Gemini)
-    Allows one product to have multiple ingredient records from different sources
     """
     SOURCE_CHOICES = [
         ('pdf', 'PDF Document'),
@@ -85,6 +117,7 @@ class AnalysisTask(models.Model):
     progress = models.IntegerField(default=0)
     current_step = models.CharField(max_length=255, blank=True)
     error_message = models.TextField(blank=True)
+    product_count = models.IntegerField(default=0)
     
     created_date = models.DateTimeField(auto_now_add=True)
     completed_date = models.DateTimeField(null=True, blank=True)

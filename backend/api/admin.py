@@ -1,7 +1,6 @@
 from django.contrib import admin
 from .models import BrandPortfolio, Product, Ingredient, AnalysisTask, UserSession
 
-
 @admin.register(BrandPortfolio)
 class BrandPortfolioAdmin(admin.ModelAdmin):
     list_display = ['name', 'created_by', 'created_date', 'total_products', 'products_with_ingredients']
@@ -22,24 +21,31 @@ class BrandPortfolioAdmin(admin.ModelAdmin):
         }),
     )
 
-
-class IngredientInline(admin.TabularInline):
-    model = Ingredient
-    extra = 0
-    readonly_fields = ['source', 'found_date']
-
-
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ['name', 'portfolio', 'category', 'has_ingredients']
-    list_filter = ['portfolio', 'category']
+    list_display = ['name', 'portfolio', 'category', 'skin_type', 'life_stage', 'gender']
+    list_filter = ['category', 'skin_type', 'life_stage', 'gender']
     search_fields = ['name', 'description']
-    inlines = [IngredientInline]
+    readonly_fields = ['created_date', 'updated_date']
     
-    def has_ingredients(self, obj):
-        return hasattr(obj, 'ingredient')
-    has_ingredients.short_description = 'Has Ingredients'
-    has_ingredients.boolean = True
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('portfolio', 'name', 'description', 'category')
+        }),
+        ('Product Details', {
+            'fields': ('skin_type', 'treatment_kind', 'benefits', 'how_to_use')
+        }),
+        ('Target Audience', {
+            'fields': ('life_stage', 'gender')
+        }),
+        ('Ingredients', {
+            'fields': ('pdf_ingredients',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_date', 'updated_date'),
+            'classes': ('collapse',)
+        }),
+    )
 
 
 @admin.register(Ingredient)
@@ -48,7 +54,6 @@ class IngredientAdmin(admin.ModelAdmin):
     list_filter = ['source', 'found_date']
     search_fields = ['product__name', 'barcode']
     readonly_fields = ['found_date']
-
 
 @admin.register(AnalysisTask)
 class AnalysisTaskAdmin(admin.ModelAdmin):
@@ -59,7 +64,6 @@ class AnalysisTaskAdmin(admin.ModelAdmin):
     
     def has_add_permission(self, request):
         return False
-
 
 @admin.register(UserSession)
 class UserSessionAdmin(admin.ModelAdmin):
