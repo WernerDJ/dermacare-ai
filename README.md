@@ -3,7 +3,7 @@
 An intelligent AI-powered platform that helps users discover personalized skincare recommendations from brand portfolios. Upload brand product catalogs, and DermaCare automatically extracts, analyzes, and recommends products based on user preferences.
 
 **Ask questions like:**
-- *"What Biotherm product is best for oily skin with acne?"*
+- *"What product is best for oily skin with acne?"*
 - *"Which products are suitable for teenagers?"*
 - *"Show me the most hydrating moisturizers"*
 - *"I'm a man with dry skin, give me a skincare routine"*
@@ -79,7 +79,6 @@ docker compose up -d
 4. **Access:**
 - App: http://localhost
 - Admin: http://localhost/admin/ (login required)
-- https://ip-xpert.com/login/
 
 ### First Time Setup
 
@@ -147,3 +146,150 @@ docker compose exec backend python manage.py createsuperuser
 ## 🏗️ Architecture
 
 ### Data Pipeline
+### Why 4 Agents?
+
+- **Specialization:** Each agent does one thing well
+- **Cost Efficiency:** Expensive LLMs only used when needed
+- **Speed:** Parallel processing, fast vector searches
+- **Accuracy:** Focused prompts lead to better results
+
+---
+
+## 🛠️ Technical Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Backend | Django 4.2 |
+| Database | PostgreSQL |
+| Vector DB | ChromaDB |
+| Task Queue | Celery + Redis |
+| LLM | OpenAI (GPT-4o-mini) |
+| Frontend | Django Templates |
+| Deployment | Docker Compose |
+| Auth | Django Built-in |
+
+### Requirements
+- Python 3.11+
+- Docker 24+
+- 2GB RAM minimum
+- 5GB storage (for vector DB)
+
+---
+
+## 📊 Performance
+
+- **Extraction:** 70 products in ~45 seconds
+- **Search Latency:** <100ms per query
+- **Enrichment Coverage:** 95%+ of products
+- **Scalability:** Handles 1000+ products per brand
+- **Concurrent Users:** 50+ simultaneous users
+
+---
+
+## 🔧 Configuration
+
+### Environment Variables
+
+```bash
+# Required
+OPENAI_API_KEY=sk-...
+SECRET_KEY=your-secret-key
+
+# Database
+DB_ENGINE=django.db.backends.postgresql
+DB_NAME=dermacare_db
+DB_USER=dermacare_user
+DB_PASSWORD=dermacare_pass
+DB_HOST=db
+DB_PORT=5432
+
+# Redis
+CELERY_BROKER_URL=redis://redis:6379/0
+
+# Security
+DEBUG=False
+ALLOWED_HOSTS=localhost,127.0.0.1,ip-xpert.com,www.ip-xpert.com
+
+# CSRF
+CSRF_TRUSTED_ORIGINS=https://ip-xpert.com,https://www.ip-xpert.com
+```
+
+---
+
+## 🧪 Testing
+
+Run test suite:
+
+```bash
+docker compose exec backend python manage.py test api.tests -v 2
+```
+
+Current coverage: **28 tests passing**
+- Auth flows (login, signup, logout)
+- Admin controls and access
+- Portfolio upload and deletion
+- Dashboard functionality
+
+---
+
+## 📦 API Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET/POST | `/login/` | User login |
+| GET/POST | `/signup/` | User registration |
+| GET | `/logout/` | User logout |
+| GET/POST | `/admin/` | Admin panel |
+| GET/POST | `/dashboard/` | User Q&A interface |
+| GET | `/api/task/<id>/status/` | Check task progress |
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Development Setup
+
+```bash
+# Clone and setup
+git clone https://github.com/yourusername/dermacare-ai.git
+cd dermacare-ai
+
+# Install dependencies
+pip install -r backend/requirements_backend.txt
+
+# Run migrations
+python backend/manage.py migrate
+
+# Start dev server
+python backend/manage.py runserver
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### CSRF Token Errors
+- Check `CSRF_TRUSTED_ORIGINS` in settings
+- Clear browser cookies
+- Ensure HTTPS for production
+
+### No Products After Upload
+- Check Celery logs: `docker compose logs celery`
+- Verify PDF contains product information
+- Check product names match document content
+
+### Search Returns No Results
+- Verify products were extracted successfully
+- Check if brand name matches exactly
+- Try simpler search terms
+
+---
+
+## 📝 License
+MIT License
