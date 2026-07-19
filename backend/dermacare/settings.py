@@ -152,3 +152,9 @@ CSRF_TRUSTED_ORIGINS = [
     'https://ip-xpert.com',
     'wwww.ip-xpert.com',
 ]
+
+# Session security
+SESSION_COOKIE_SECURE = True  # Only send cookies over HTTPS
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = True
