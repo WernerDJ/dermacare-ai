@@ -250,11 +250,15 @@ def get_ai_response(question, brand_ids):
     formatted_products = agent3.format_for_agent4(filtered_products)
     
     # Agent 4: Generate answer
-    agent4 = Agent4Answerer(api_key=os.getenv("OPENAI_API_KEY"))
-    answer = agent4.answer_question(question, formatted_products)
+    agent4 = Agent4Answerer(openai_api_key=os.getenv("OPENAI_API_KEY"))
+    answer, referenced_products = agent4.answer_question(
+        question=question, 
+        brand_names=brand_names, 
+        top_k=5
+    )
     
     # Extract product names for display
-    products_referenced = [p.get('product', 'Unknown') for p in filtered_products if p.get('product')]
+    products_referenced = [p['metadata'].get('product', 'Unknown') for p in filtered_products if p.get('metadata', {}).get('product')]
     
     return answer, brand_names, products_referenced, 0
 
