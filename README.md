@@ -163,7 +163,7 @@ docker compose exec backend python manage.py createsuperuser
 | Database | PostgreSQL |
 | Vector DB | ChromaDB |
 | Task Queue | Celery + Redis |
-| LLM | OpenAI (GPT-4o-mini) |
+| LLMs | OpenAI (GPT-4o-mini / gpt-4-turbo") |
 | Frontend | Django Templates |
 | Deployment | Docker Compose |
 | Auth | Django Built-in |
