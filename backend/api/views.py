@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
 from django.http import JsonResponse
 from django.conf import settings  
+import json
 import logging
 from django.views.decorators.http import require_POST
 import uuid
@@ -277,3 +278,99 @@ def api_task_status(request, task_id):
         'error_message': task.error_message,
         'product_count': task.product_count,
     })
+@login_required
+@user_passes_test(is_admin)
+def product_editor(request, portfolio_id=None):
+    """Database editor for products"""
+    portfolios = BrandPortfolio.objects.all()
+    
+
+    if portfolio_id:
+        portfolio = BrandPortfolio.objects.get(id=portfolio_id)
+        products = Product.objects.filter(portfolio=portfolio).order_by('name')
+
+        # Convert to JSON-serializable format
+        products_json = [
+            {
+                'id': p.id,
+                'name': p.name,
+                'category': p.category,
+                'description': p.description,
+                'benefits': p.benefits,
+                'how_to_use': p.how_to_use,
+                'pdf_ingredients': p.pdf_ingredients,
+                'skin_type': p.skin_type,
+                'treatment_kind': p.treatment_kind,
+                'life_stage': p.life_stage,
+                'gender': p.gender,
+            }
+            for p in products
+        ]
+    else:
+        portfolio = None
+        products = []
+    
+    import json
+    context = {
+        'portfolios': portfolios,
+        'portfolio': portfolio,
+        'products': json.dumps(products_json),
+        'skin_type_choices': Product.SKIN_TYPE_CHOICES,
+        'life_stage_choices': Product.LIFE_STAGE_CHOICES,
+        'gender_choices': Product.GENDER_CHOICES,
+    }
+    return render(request, 'product_editor.html', context)
+
+@login_required
+@user_passes_test(is_admin)
+def product_editor_api(request, product_id=None):
+    """API for product editor CRUD"""
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        action = data.get('action')
+        
+        if action == 'save':
+            product_id = data.get('product_id')
+            if product_id:
+                product = Product.objects.get(id=product_id)
+            else:
+                product = Product(portfolio_id=data.get('portfolio_id'))
+            
+            product.name = data.get('name')
+            product.category = data.get('category')
+            product.description = data.get('description')
+            product.benefits = data.get('benefits')
+            product.how_to_use = data.get('how_to_use')
+            product.pdf_ingredients = data.get('ingredients')
+            product.skin_type = data.get('skin_type', 'all')
+            product.treatment_kind = data.get('treatment_kind')
+            product.life_stage = data.get('life_stage', 'all')
+            product.gender = data.get('gender', 'unisex')
+            
+            product.save()
+            return JsonResponse({'success': True, 'product_id': product.id})
+        
+        elif action == 'delete':
+            product_id = data.get('product_id')
+            Product.objects.get(id=product_id).delete()
+            return JsonResponse({'success': True})
+
+        elif action == 'create':
+            portfolio_id = data.get('portfolio_id')
+            try:
+                # Make product name unique by adding timestamp
+                from django.utils import timezone
+                unique_name = f"New Product {timezone.now().timestamp()}"
+                
+                product = Product.objects.create(
+                    portfolio_id=portfolio_id,
+                    name=unique_name,
+                    skin_type='all',
+                    life_stage='all',
+                    gender='unisex'
+                )
+                return JsonResponse({'success': True, 'product_id': product.id})
+            except Exception as e:
+                return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    
+    return JsonResponse({'error': 'Invalid request'}, status=400)

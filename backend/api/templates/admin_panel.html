@@ -57,7 +57,11 @@
         </div>
     {% else %}
         <p style="color: #666;">No tasks yet</p>
-    {% endif %}
+        {% endif %}
+        
+    <h3>📊 Product Database Editor</h3>
+    <p>Edit, add, or delete products directly in the database</p>
+    <a href="{% url 'product_editor' %}" class="btn btn-info mb-3">📊 Open Editor</a>
 
     <h3>📚 Saved Portfolios</h3>
     {% if portfolios %}

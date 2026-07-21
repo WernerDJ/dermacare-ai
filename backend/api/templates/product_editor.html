@@ -1,0 +1,391 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Product Database Editor</h1>
+    
+    <div class="row">
+        <!-- Brand Selector -->
+        <div class="col-md-3">
+            <h4>Brands</h4>
+            <div class="list-group" style="max-height: 500px; overflow-y: auto;">
+                {% for p in portfolios %}
+                    <a href="{% url 'product_editor_portfolio' p.id %}" 
+                       class="list-group-item list-group-item-action {% if portfolio.id == p.id %}active{% endif %}">
+                        {{ p.name }} ({{ p.total_products }})
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Product Editor -->
+        <div class="col-md-9">
+            {% if portfolio %}
+                <h3>{{ portfolio.name }} - <span id="totalCount">0</span> Products</h3>
+                
+                <!-- Navigation -->
+                <div class="btn-group mb-3" role="group">
+                    <button type="button" class="btn btn-outline-secondary" onclick="firstRecord()">⏮ First</button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="previousRecord()">◀ Previous</button>
+                    <span class="ms-3 me-3" style="line-height: 38px;">
+                        <span id="currentIndex">-</span> / <span id="totalCount">0</span>
+                    </span>
+                    <button type="button" class="btn btn-outline-secondary" onclick="nextRecord()">Next ▶</button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="lastRecord()">Last ⏭</button>
+                    <button type="button" class="btn btn-success ms-2" onclick="newRecord()">+ New</button>
+                </div>
+                
+                <!-- Edit Form -->
+                <div class="card">
+                    <div class="card-body">
+                        <form id="productForm">
+                            {% csrf_token %}
+                            <input type="hidden" id="productId">
+                            <input type="hidden" id="portfolioId" value="{{ portfolio.id }}">
+                            
+                            <div class="mb-3">
+                                <label for="productName" class="form-label">Product Name *</label>
+                                <input type="text" class="form-control" id="productName" required>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="skinType" class="form-label">Skin Type</label>
+                                        <select class="form-select" id="skinType">
+                                            {% for value, label in skin_type_choices %}
+                                                <option value="{{ value }}">{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="gender" class="form-label">Gender</label>
+                                        <select class="form-select" id="gender">
+                                            {% for value, label in gender_choices %}
+                                                <option value="{{ value }}">{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="lifeStage" class="form-label">Life Stage</label>
+                                        <select class="form-select" id="lifeStage">
+                                            {% for value, label in life_stage_choices %}
+                                                <option value="{{ value }}">{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="treatmentKind" class="form-label">Treatment Kind</label>
+                                        <input type="text" class="form-control" id="treatmentKind">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="category" class="form-label">Category</label>
+                                <input type="text" class="form-control" id="category">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="description" class="form-label">Description</label>
+                                <textarea class="form-control" id="description" rows="3"></textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="benefits" class="form-label">Benefits</label>
+                                <textarea class="form-control" id="benefits" rows="3"></textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="howToUse" class="form-label">How to Use</label>
+                                <textarea class="form-control" id="howToUse" rows="3"></textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="ingredients" class="form-label">Ingredients</label>
+                                <textarea class="form-control" id="ingredients" rows="4"></textarea>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="card-footer">
+                        <button type="button" class="btn btn-primary" onclick="saveProduct()">💾 Save</button>
+                        <button type="button" class="btn btn-danger" onclick="deleteProduct()">🗑 Delete</button>
+                    </div>
+                </div>
+                <!-- Feedback Message -->
+                <div id="feedbackMessage" class="alert mt-3" style="display: none;"></div>
+            {% else %}
+                <div class="alert alert-info">
+                    Select a brand to view and edit products
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+let products = {{ products|safe }};
+let currentIndex = -1;
+
+function loadProduct(index) {
+    if (index < 0 || index >= products.length) return;
+    currentIndex = index;
+    const product = products[index];
+    
+    document.getElementById('productId').value = product.id;
+    document.getElementById('productName').value = product.name;
+    document.getElementById('category').value = product.category || '';
+    document.getElementById('description').value = product.description || '';
+    document.getElementById('benefits').value = product.benefits || '';
+    document.getElementById('howToUse').value = product.how_to_use || '';
+    document.getElementById('ingredients').value = product.pdf_ingredients || '';
+    document.getElementById('skinType').value = product.skin_type || 'all';
+    document.getElementById('treatmentKind').value = product.treatment_kind || '';
+    document.getElementById('lifeStage').value = product.life_stage || 'all';
+    document.getElementById('gender').value = product.gender || 'unisex';
+    
+    document.getElementById('currentIndex').textContent = index + 1;
+    document.getElementById('totalCount').textContent = products.length;
+}
+
+function firstRecord() {
+    if (products.length > 0) loadProduct(0);
+}
+
+function previousRecord() {
+    if (currentIndex > 0) loadProduct(currentIndex - 1);
+}
+
+function nextRecord() {
+    if (currentIndex < products.length - 1) loadProduct(currentIndex + 1);
+}
+
+function lastRecord() {
+    if (products.length > 0) loadProduct(products.length - 1);
+}
+
+function showMessage(message, type = 'success') {
+    const msgDiv = document.getElementById('feedbackMessage');
+    msgDiv.textContent = message;
+    msgDiv.className = `alert alert-${type} mt-3`;
+    msgDiv.style.display = 'block';
+    
+    // Auto-hide after 4 seconds
+    setTimeout(() => {
+        msgDiv.style.display = 'none';
+    }, 4000);
+}
+
+function saveProduct() {
+    const data = {
+        action: 'save',
+        product_id: document.getElementById('productId').value || null,
+        portfolio_id: document.getElementById('portfolioId').value,
+        name: document.getElementById('productName').value,
+        category: document.getElementById('category').value,
+        description: document.getElementById('description').value,
+        benefits: document.getElementById('benefits').value,
+        how_to_use: document.getElementById('howToUse').value,
+        ingredients: document.getElementById('ingredients').value,
+        skin_type: document.getElementById('skinType').value,
+        treatment_kind: document.getElementById('treatmentKind').value,
+        life_stage: document.getElementById('lifeStage').value,
+        gender: document.getElementById('gender').value,
+    };
+    
+    fetch('{% url "product_editor_api" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            showMessage('✅ Product saved successfully!', 'success');
+            // Don't reload, just stay on the page
+        } else {
+            showMessage('❌ Error saving product', 'danger');
+        }
+    })
+    .catch(err => showMessage('❌ Network error: ' + err, 'danger'));
+}
+
+function newRecord() {
+    const portfolioId = document.getElementById('portfolioId').value;
+    
+    fetch('{% url "product_editor_api" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({action: 'create', portfolio_id: portfolioId})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            showMessage('✅ New product created!', 'success');
+            // Add new product to the array and load it
+            const newProduct = {
+                id: d.product_id,
+                name: 'New Product',
+                category: '',
+                description: '',
+                benefits: '',
+                how_to_use: '',
+                pdf_ingredients: '',
+                skin_type: 'all',
+                treatment_kind: '',
+                life_stage: 'all',
+                gender: 'unisex',
+            };
+            products.push(newProduct);
+            document.getElementById('totalCount').textContent = products.length;
+            loadProduct(products.length - 1);
+        } else {
+            showMessage('❌ Error creating product', 'danger');
+        }
+    })
+    .catch(err => showMessage('❌ Network error: ' + err, 'danger'));
+}
+
+function deleteProduct() {
+    if (!confirm('Delete this product?')) return;
+    
+    const productId = document.getElementById('productId').value;
+    if (!productId) return;
+    
+    fetch('{% url "product_editor_api" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({action: 'delete', product_id: productId})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            showMessage('✅ Product deleted!', 'success');
+            products.splice(currentIndex, 1);
+            document.getElementById('totalCount').textContent = products.length;
+            if (products.length > 0) {
+                if (currentIndex >= products.length) currentIndex = products.length - 1;
+                loadProduct(currentIndex);
+            } else {
+                document.getElementById('productForm').reset();
+                document.getElementById('currentIndex').textContent = '-';
+            }
+        } else {
+            showMessage('❌ Error deleting product', 'danger');
+        }
+    })
+    .catch(err => showMessage('❌ Network error: ' + err, 'danger'));
+}
+
+
+function deleteProduct() {
+    if (!confirm('Delete this product?')) return;
+    
+    const productId = document.getElementById('productId').value;
+    if (!productId) return;
+    
+    fetch('{% url "product_editor_api" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({action: 'delete', product_id: productId})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            alert('✅ Product deleted!');
+            location.reload();
+        }
+    });
+}
+
+function newRecord() {
+    const portfolioId = document.getElementById('portfolioId').value;
+    
+    fetch('{% url "product_editor_api" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({action: 'create', portfolio_id: portfolioId})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            // Add new product to array
+            const newProduct = {
+                id: d.product_id,
+                name: 'New Product',
+                category: '',
+                description: '',
+                benefits: '',
+                how_to_use: '',
+                pdf_ingredients: '',
+                skin_type: 'all',
+                treatment_kind: '',
+                life_stage: 'all',
+                gender: 'unisex',
+            };
+            products.push(newProduct);
+            
+            // Update total count
+            document.getElementById('totalCount').textContent = products.length;
+            document.getElementById('currentIndex').textContent = products.length;
+            
+            // Load the new product with empty fields
+            currentIndex = products.length - 1;
+            loadProduct(currentIndex);
+            
+            showMessage('✅ New product created! Fill in the details and click Save.', 'success');
+        } else {
+            showMessage('❌ Error creating product', 'danger');
+        }
+    })
+    .catch(err => {
+        showMessage('❌ Network error: ' + err, 'danger');
+        console.error(err);
+    });
+}
+
+// Load first record on page load
+window.onload = function() {
+    if (products.length > 0) {
+        loadProduct(0);
+    }
+}
+</script>
+
+<style>
+#productForm {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 5px;
+}
+
+.card-footer {
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+}
+</style>
+{% endblock %}
