@@ -5,3 +5,7 @@ __pycache__/
 venv/
 env/
 to_do.txt
+*.pdf
+/backend/tests/uploads/*.pdf
+/backend/media/
+/uploads/
