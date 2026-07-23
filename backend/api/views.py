@@ -284,7 +284,9 @@ def product_editor(request, portfolio_id=None):
     """Database editor for products"""
     portfolios = BrandPortfolio.objects.all()
     
-
+    products_json = []  # ← ADD THIS LINE
+    portfolio = None
+    
     if portfolio_id:
         portfolio = BrandPortfolio.objects.get(id=portfolio_id)
         products = Product.objects.filter(portfolio=portfolio).order_by('name')
