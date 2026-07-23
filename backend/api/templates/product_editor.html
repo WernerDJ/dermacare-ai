@@ -212,13 +212,33 @@ function saveProduct() {
     })
     .then(r => r.json())
     .then(d => {
-        if (d.success) {
-            showMessage('✅ Product saved successfully!', 'success');
-            // Don't reload, just stay on the page
-        } else {
-            showMessage('❌ Error saving product', 'danger');
+            if (d.success) {
+        showMessage('✅ Product saved successfully!', 'success');
+        
+        // Update the in-memory product with saved data
+        const productId = parseInt(document.getElementById('productId').value);
+        const productIndex = products.findIndex(p => p.id === productId);
+        
+        if (productIndex !== -1) {
+            products[productIndex] = {
+                id: productId,
+                name: document.getElementById('productName').value,
+                category: document.getElementById('category').value,
+                description: document.getElementById('description').value,
+                benefits: document.getElementById('benefits').value,
+                how_to_use: document.getElementById('howToUse').value,
+                pdf_ingredients: document.getElementById('ingredients').value,
+                skin_type: document.getElementById('skinType').value,
+                treatment_kind: document.getElementById('treatmentKind').value,
+                life_stage: document.getElementById('lifeStage').value,
+                gender: document.getElementById('gender').value,
+            };
         }
-    })
+    } else {
+        showMessage('❌ Error saving product', 'danger');
+    }
+})
+
     .catch(err => showMessage('❌ Network error: ' + err, 'danger'));
 }
 
