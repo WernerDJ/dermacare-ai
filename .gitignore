@@ -9,3 +9,4 @@ to_do.txt
 /backend/tests/uploads/*.pdf
 /backend/media/
 /uploads/
+*.docx
