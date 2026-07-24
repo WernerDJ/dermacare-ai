@@ -61,17 +61,58 @@ def analyze_portfolio_task(self, portfolio_id, document_path, brand_name, produc
             except Exception as e:
                 print(f"Error creating Product: {str(e)}")
         
+        # Check how many products were actually saved to database
+        final_db_count = Product.objects.filter(portfolio=portfolio).count()
+        print(f"✅ Products saved to database: {final_db_count}")
+        
+        # Always re-vectorize to ensure ChromaDB is in sync with database
+        if final_db_count > 0:
+            print(f"🔄 Auto-syncing ChromaDB with database...")
+            try:
+                # Get all products from database
+                db_products = Product.objects.filter(portfolio=portfolio)
+                products_to_sync = [
+                    {
+                        'product': p.name,
+                        'brand': brand_name,
+                        'skin_type': p.skin_type,
+                        'treatment_kind': p.treatment_kind,
+                        'skin_problems': [],
+                        'body_parts': ['Face'],
+                        'life_stage': p.life_stage,
+                        'gender': p.gender,
+                        'ingredients': p.pdf_ingredients,
+                        'usage': p.how_to_use,
+                        'benefits': p.benefits,
+                    }
+                    for p in db_products
+                ]
+                
+                # Re-vectorize everything
+                vectorizer = Agent2Vectorizer(chroma_db_path="/app/chroma_db")
+                synced_count, _ = vectorizer.vectorize_products(products_to_sync, brand_name)
+                
+                print(f"✅ ChromaDB synced: {synced_count} products")
+                
+            except Exception as e:
+                print(f"⚠️ ChromaDB sync failed: {str(e)}")
+        
+        # Update portfolio count with actual database count
+        portfolio.total_products = final_db_count
+        portfolio.save()
+        print(f"✅ Portfolio updated: {final_db_count} products")
+        
         # Update task
         analysis_task = AnalysisTask.objects.get(task_id=self.request.id)
         analysis_task.status = 'completed'
         analysis_task.completed_at = timezone.now()
-        analysis_task.product_count = stored_count
+        analysis_task.product_count = final_db_count
         analysis_task.save()
         
         return {
             'status': 'success',
             'portfolio_id': portfolio_id,
-            'products_found': len(products),
+            'products_found': final_db_count,
             'products_failed': len(errors),
             'enriched': enriched_count,
         }
