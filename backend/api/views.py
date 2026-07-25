@@ -357,6 +357,14 @@ def product_editor_api(request, product_id=None):
             Product.objects.get(id=product_id).delete()
             return JsonResponse({'success': True})
 
+        elif action == 'refresh_count':
+            portfolio_id = data.get('portfolio_id')
+            portfolio = BrandPortfolio.objects.get(id=portfolio_id)
+            count = Product.objects.filter(portfolio=portfolio).count()
+            portfolio.total_products = count
+            portfolio.save()
+            return JsonResponse({'success': True, 'new_count': count})
+    
         elif action == 'create':
             portfolio_id = data.get('portfolio_id')
             try:
