@@ -417,7 +417,7 @@ Natural Language Response
 | Database | PostgreSQL |
 | Vector DB | ChromaDB |
 | Task Queue | Celery + Redis |
-| LLM | OpenAI (GPT-4o-mini) |
+| LLM | OpenAI (GPT-4o-mini / GPT-4.1) |
 | Frontend | Django Templates |
 | Deployment | Docker Compose |
 | Auth | Django Built-in |
