@@ -2,7 +2,7 @@ from celery import shared_task
 from django.utils import timezone
 import os
 from pathlib import Path
-from .models import BrandPortfolio, Product, AnalysisTask
+from .models import BrandPortfolio, Product, AnalysisTask, SearchLog
 from .agents import Agent1Extractor, Agent2Vectorizer
 
 @shared_task(bind=True)
@@ -130,5 +130,40 @@ def analyze_portfolio_task(self, portfolio_id, document_path, brand_name, produc
         return {
             'status': 'error',
             'portfolio_id': portfolio_id,
+            'error': str(e)
+        }
+
+#This code keeps a record of the information that the 3rd agent handles to the 4th and final agent
+@shared_task(bind=True)
+def skincare_recommendation_task(self, question, user_id, brands):
+    """
+    Multi-agent pipeline for skincare recommendations
+    """
+    from django.contrib.auth.models import User
+    
+    try:
+        user = User.objects.get(id=user_id)
+        
+        # ... existing agent code ...
+        
+        # Log the search
+        SearchLog.objects.create(
+            user=user,
+            question=question,
+            agent3_filters=filters,  # From Agent 3
+            agent3_products=[p['metadata'] for p in filtered_products],  # Agent 3 output
+            agent4_response=answer,  # From Agent 4
+            brands_searched=brands,
+        )
+        
+        return {
+            'status': 'success',
+            'answer': answer,
+            'products': formatted_products
+        }
+    except Exception as e:
+        logger.error(f"Task failed: {str(e)}")
+        return {
+            'status': 'error',
             'error': str(e)
         }

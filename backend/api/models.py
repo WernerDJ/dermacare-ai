@@ -138,3 +138,28 @@ class UserSession(models.Model):
     
     def __str__(self):
         return f"{self.user.username}'s session"
+
+#This method keeps a record of the information that the 3rd agent handles to the 4th and final agent
+class SearchLog(models.Model):
+    """Log of user searches and agent responses"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    question = models.TextField()
+    
+    # Agent 3 output
+    agent3_filters = models.JSONField(default=dict, help_text="Extracted filters from query")
+    agent3_products = models.JSONField(default=list, help_text="Products found by Agent 3")
+    
+    # Agent 4 output
+    agent4_response = models.TextField(blank=True, help_text="Final answer from Agent 4")
+    
+    # Metadata
+    brands_searched = models.JSONField(default=list)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = "Search Log"
+        verbose_name_plural = "Search Logs"
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.question[:50]} ({self.timestamp.strftime('%Y-%m-%d %H:%M')})"

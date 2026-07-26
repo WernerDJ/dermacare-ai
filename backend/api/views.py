@@ -209,12 +209,25 @@ def user_dashboard(request):
             messages.error(request, 'Please select at least one brand')
         else:
             try:
-                answer, brands_used, products_referenced, tokens_used = get_ai_response(
+                answer, brands_used, products_referenced, tokens_used, agent3_filters, agent3_products = get_ai_response(
                     question=question,
                     brand_ids=brand_ids
                 )
+                
                 if not answer:
                     messages.warning(request, 'No products found matching your criteria')
+                else:
+                    # ✅ LOG THE SEARCH
+                    from .models import SearchLog
+                    SearchLog.objects.create(
+                        user=request.user,
+                        question=question,
+                        agent3_filters=agent3_filters,
+                        agent3_products=agent3_products,
+                        agent4_response=answer,
+                        brands_searched=brands_used,
+                    )
+                    
             except Exception as e:
                 messages.error(request, f'Error: {str(e)}')
     
@@ -233,19 +246,25 @@ def user_dashboard(request):
 def get_ai_response(question, brand_ids):
     """Get AI response using Agent 3 + 4"""
     
+    from .agents import Agent3Filter, Agent4Answerer
+    
     # Get brand names
     portfolios = BrandPortfolio.objects.filter(id__in=brand_ids)
     brand_names = list(portfolios.values_list('name', flat=True))
     
     if not brand_names:
-        return None, [], [], 0
+        return None, [], [], 0, {}, []
     
     # Agent 3: Filter products
     agent3 = Agent3Filter(chroma_db_path="/app/chroma_db")
-    filtered_products = agent3.search_products(question, brand_names, top_k=5)
+    filtered_products = agent3.search_products(question, brand_names, top_k=10)
+    
+    # Extract Agent 3 filters for logging
+    agent3_filters = agent3.extract_filters_from_query(question)
+    agent3_products = [p['metadata'] for p in filtered_products]
     
     if not filtered_products:
-        return None, brand_names, [], 0
+        return None, brand_names, [], 0, agent3_filters, agent3_products
     
     # Format for Agent 4
     formatted_products = agent3.format_for_agent4(filtered_products)
@@ -255,13 +274,13 @@ def get_ai_response(question, brand_ids):
     answer, referenced_products = agent4.answer_question(
         question=question, 
         brand_names=brand_names, 
-        top_k=5
+        top_k=10
     )
     
     # Extract product names for display
     products_referenced = [p['metadata'].get('product', 'Unknown') for p in filtered_products if p.get('metadata', {}).get('product')]
     
-    return answer, brand_names, products_referenced, 0
+    return answer, brand_names, products_referenced, 0, agent3_filters, agent3_products
 
 # ============ API ENDPOINTS (for future use) ============
 
@@ -364,7 +383,7 @@ def product_editor_api(request, product_id=None):
             portfolio.total_products = count
             portfolio.save()
             return JsonResponse({'success': True, 'new_count': count})
-    
+
         elif action == 'create':
             portfolio_id = data.get('portfolio_id')
             try:
@@ -384,3 +403,17 @@ def product_editor_api(request, product_id=None):
                 return JsonResponse({'success': False, 'error': str(e)}, status=400)
     
     return JsonResponse({'error': 'Invalid request'}, status=400)
+
+@login_required
+@user_passes_test(is_admin)
+def search_logs(request):
+    """Display all user search logs"""
+    from .models import SearchLog
+    
+    logs = SearchLog.objects.all().order_by('-timestamp')[:100]  # Last 100
+    
+    context = {
+        'logs': logs,
+        'total_searches': SearchLog.objects.count(),
+    }
+    return render(request, 'search_logs.html', context)

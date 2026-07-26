@@ -68,7 +68,7 @@ Respond ONLY with valid JSON, no other text:
         try:
             with trace("Agent3: OpenAI Filter Extraction"):
                 response = self.openai_client.messages.create(
-                    model="gpt-4o-mini",
+                    model="GPT-4.1",
                     max_tokens=500,
                     messages=[
                         {"role": "user", "content": extraction_prompt}
@@ -95,27 +95,41 @@ Respond ONLY with valid JSON, no other text:
         except Exception as e:
             self.logger.error(f"OpenAI filter extraction failed: {str(e)}")
             return {}
-    
+        
     def search_products(self, query: str, brand_names: List[str], top_k: int = 5) -> List[Dict]:
         """
         Search products using metadata filtering + semantic search
-        
-        Args:
-            query: User's question/search query
-            brand_names: List of brands to search in
-            top_k: Number of top results to return
-            
-        Returns:
-            List of relevant products with metadata
+        Handles routine queries specially to return diverse products
         """
         
         with trace(f"Agent3: Smart Search - '{query}'"):
+            query_lower = query.lower()
+            
+            # Detect routine queries
+            is_routine_query = any(word in query_lower for word in [
+                'routine', 'regimen', 'set', 'combo', 'complete', 'full',
+                'morning and evening', 'day and night', 'cleanser', 'serum', 'moisturizer'
+            ])
+            
+            # For routines: be more permissive and get more products
+            if is_routine_query:
+                top_k = 15  # Get 15 instead of 5
+                relevance_threshold = 2.5  # More lenient threshold
+                self.logger.info(f"🔄 Routine query detected - getting {top_k} diverse products")
+            else:
+                relevance_threshold = 2.0
+            
             # Step 1: Use OpenAI to extract filters
             filters = self.extract_filters_from_query(query)
+            
+            # For routines, don't filter by treatment_kind (user wants variety)
+            if is_routine_query and 'treatment_kind' in filters:
+                self.logger.info(f"Routine query: ignoring treatment_kind filter '{filters['treatment_kind']}' for diversity")
+                del filters['treatment_kind']
+            
             self.logger.info(f"Applied filters: {filters}")
             
             all_results = []
-            relevance_threshold = 2.0
             
             for brand_name in brand_names:
                 collection_name = brand_name.lower().replace(" ", "_")
@@ -126,16 +140,16 @@ Respond ONLY with valid JSON, no other text:
                     self.logger.warning(f"Collection not found: {collection_name}")
                     continue
                 
-                # Step 2: Vector search
+                # Vector search
                 results = collection.query(
                     query_texts=[query],
-                    n_results=top_k * 5
+                    n_results=top_k * 3  # Get even more to filter
                 )
                 
                 if not results['ids'] or len(results['ids'][0]) == 0:
                     continue
                 
-                # Step 3: Filter by metadata constraints
+                # Filter by metadata constraints
                 for i, doc_id in enumerate(results['ids'][0]):
                     distance = results['distances'][0][i] if 'distances' in results else 999
                     metadata = results['metadatas'][0][i]
@@ -155,14 +169,63 @@ Respond ONLY with valid JSON, no other text:
                     }
                     all_results.append(result)
             
-            # Step 4: Sort by relevance and return top_k
+            # Sort by relevance
             all_results.sort(key=lambda x: x['distance'] if x['distance'] is not None else float('inf'))
-            filtered_results = all_results[:top_k]
             
-            self.logger.info(f"Agent3: Returned {len(filtered_results)} products")
+            # For routines: prefer product type diversity
+            if is_routine_query:
+                diverse_results = self._select_diverse_products(all_results, top_k)
+                self.logger.info(f"Agent3: Returned {len(diverse_results)} diverse products for routine")
+                return diverse_results
+            else:
+                filtered_results = all_results[:top_k]
+                self.logger.info(f"Agent3: Returned {len(filtered_results)} products")
+                return filtered_results
+
+    def _select_diverse_products(self, all_results: List[Dict], top_k: int) -> List[Dict]:
+        """
+        For routine queries, select diverse product types instead of just best matches
+        Prioritizes: Cleanser, Serum, Moisturizer, SPF
+        """
+        
+        product_types = {}
+        
+        for result in all_results:
+            treatment = result['metadata'].get('treatment_kind', 'Other').lower()
+            product_name = result['metadata'].get('product', '').lower()
             
-            return filtered_results
+            # Categorize products
+            category = 'Other'
+            if 'cleanser' in treatment or 'cleanser' in product_name or 'cleansing' in product_name:
+                category = 'Cleanser'
+            elif 'serum' in treatment or 'serum' in product_name:
+                category = 'Serum'
+            elif 'moisturizer' in treatment or 'moisturiz' in product_name or 'cream' in product_name:
+                category = 'Moisturizer'
+            elif 'spf' in product_name or 'sunscreen' in treatment or 'sun protection' in treatment:
+                category = 'SPF'
+            
+            if category not in product_types:
+                product_types[category] = []
+            product_types[category].append(result)
+        
+        # Select diverse products: 2 cleansers, 2 serums, 2 moisturizers, 1 SPF
+        diverse = []
+        selection_strategy = {
+            'Cleanser': 2,
+            'Serum': 2,
+            'Moisturizer': 3,
+            'SPF': 1,
+            'Other': 2,
+        }
+        
+        for category, count in selection_strategy.items():
+            if category in product_types:
+                diverse.extend(product_types[category][:count])
+        
+        return diverse[:top_k]
     
+
     def _matches_filters(self, product_metadata: Dict, filters: Dict) -> bool:
         """
         Check if product metadata matches all extracted filters

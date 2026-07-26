@@ -150,7 +150,7 @@ CSRF_TRUSTED_ORIGINS = [
     'http://127.0.0.1',
     'http://dermacare_backend:8000',
     'https://ip-xpert.com',
-    'wwww.ip-xpert.com',
+    'https://www.ip-xpert.com',
 ]
 
 # Session security

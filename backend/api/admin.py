@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import BrandPortfolio, Product, Ingredient, AnalysisTask, UserSession
+from .models import BrandPortfolio, Product, Ingredient, AnalysisTask, UserSession, SearchLog
 
 @admin.register(BrandPortfolio)
 class BrandPortfolioAdmin(admin.ModelAdmin):
@@ -78,3 +78,14 @@ class UserSessionAdmin(admin.ModelAdmin):
     
     def has_add_permission(self, request):
         return False
+
+#This method keeps a record of the information that the 3rd agent handles to the 4th and final agent
+@admin.register(SearchLog)
+class SearchLogAdmin(admin.ModelAdmin):
+    list_display = ['user', 'question', 'timestamp']
+    list_filter = ['timestamp', 'user']
+    search_fields = ['question']
+    readonly_fields = ['timestamp', 'question', 'agent3_filters', 'agent3_products', 'agent4_response']
+    
+    def has_add_permission(self, request):
+        return False  # Read-only in admin

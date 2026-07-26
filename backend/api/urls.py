@@ -23,4 +23,7 @@ urlpatterns = [
     path('product-editor/', views.product_editor, name='product_editor'),
     path('product-editor/<int:portfolio_id>/', views.product_editor, name='product_editor_portfolio'),
     path('api/product-editor/', views.product_editor_api, name='product_editor_api'),
+
+    #Search Logs
+    path('search-logs/', views.search_logs, name='search_logs'),
 ]
