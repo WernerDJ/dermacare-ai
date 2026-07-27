@@ -14,13 +14,22 @@ logger = logging.getLogger(__name__)
 
 class Agent3Filter:
     """
-    Filters and retrieves relevant products using AI-powered filter extraction
+    Intelligent product filtering using AI-powered metadata extraction + semantic search
+    
+    Uses OpenAI to extract user preferences (gender, skin type, life stage, treatment) 
+    from natural language queries, then filters ChromaDB vector search results with
+    hierarchical life stage matching.
+    
+    Smart features:
+    - Detects routine queries and returns diverse product types
+    - Hierarchical life stage filtering (teenagers include older categories)
+    - Zero-cost vector semantic search with AI-enhanced filtering
     """
     
     # Correct life stage hierarchy
     LIFE_STAGE_HIERARCHY = {
         'all ages': ['all ages', 'babies', 'children', 'teenagers', 'adults', 'menopausal', 'post-menopausal'],
-        'babies': ['babies'],
+        'babies': ['babies', 'children'],
         'children': ['children', 'teenagers', 'adults'],  # Children can use teen+ products
         'teenagers': ['teenagers', 'adults', 'menopausal', 'post-menopausal'],
         'adults': ['adults', 'menopausal', 'post-menopausal'],

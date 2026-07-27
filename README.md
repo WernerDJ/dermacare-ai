@@ -222,7 +222,7 @@ Get AI-generated recommendations with detailed reasoning.
 - 4-specialized AI agents working in pipeline:
   - **Agent 1:** Extracts product metadata from documents
   - **Agent 2:** Vectorizes products and enriches ingredient data
-  - **Agent 3:** Filters products based on user preferences (free vector search)
+  - **Agent 3:** Filters products based on user preferences (AI-powered natural language filter extraction)
   - **Agent 4:** Generates natural language recommendations
 - Cost-optimized: Uses cheaper models where possible, free APIs for data enrichment
 - Real-time learning: Improves recommendations based on portfolio data
@@ -390,9 +390,11 @@ Ready for Queries & Editing
 ↓
 User Question OR Admin Edit
 ↓
-Agent 3: Filter (Vector Search)
-Zero-cost semantic search
-Filter by preferences
+Agent 3: Intelligent Filter
+model= gpt-4.1 + ChromaDB Vector Search
+Uses OpenAI to intelligently extract metadata filters (gender, skin type, life stage, treatment kind) 
+from user queries, then performs semantic search on ChromaDB with structured filtering.
+
 ↓
 Agent 4: Answer (OpenAI)
 Generate recommendations
