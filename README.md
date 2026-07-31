@@ -1,548 +1,357 @@
-# DermaCare AI - Dermocosmetic Product Advisor
+# DermaCare AI - Personalized Skincare Recommendation System
 
-An intelligent AI-powered platform that helps users discover personalized skincare recommendations from brand portfolios. Upload brand product catalogs, automatically extract product metadata, and manage your product database with an intuitive editor.
+**An AI-powered dermocosmetic advisor that analyzes user skincare needs and recommends products from trusted brands using a sophisticated multi-agent system.**
 
-**Ask questions like:**
-- *"What Biotherm product is best for oily skin with acne?"*
-- *"Which products are suitable for teenagers?"*
-- *"Show me the most hydrating moisturizers"*
-- *"I'm a man with dry skin, give me a skincare routine"*
-
-Get AI-generated recommendations with detailed reasoning.
+🔗 **Repository**: https://github.com/WernerDJ/dermacare-ai
 
 ---
 
-## ✨ Key Features
+## 🎯 Project Overview
 
-### 📚 Brand Portfolio Management
-- Upload brand product catalogs (PDF, DOCX, TXT)
-- Automatically extract product metadata (ingredients, benefits, usage)
-- Store up to 1000+ products per brand
-- Track analysis history and status
+DermaCare uses a **4-agent AI pipeline** to understand user skincare questions and recommend the most relevant products from your brand portfolio. The system combines:
+- **Semantic search** (ChromaDB vector embeddings)
+- **Intelligent metadata filtering** (life stage hierarchies, skin types, treatment kinds)
+- **Natural language understanding** (OpenAI GPT models)
+- **Structured product database** (PostgreSQL)
 
-### 🗄️ Product Database Editor (NEW)
-- **Direct database access** for administrators
-- **CRUD operations**: Create, Read, Update, Delete products
-- **Intuitive UI** with record navigation (First, Previous, Next, Last)
-- **Smart form fields**:
-  - Text inputs: Product name, Category, Description, Benefits, Usage, Ingredients
-  - Dropdown selects: Skin Type, Treatment Kind, Life Stage, Gender
-- **Instant feedback**: Save confirmations and error messages
-- **Batch editing**: Manage all products in a portfolio
-- **Real-time updates**: Changes appear immediately without page reload
-
-### 🤖 Intelligent Recommendation Engine
-- 4-specialized AI agents working in pipeline:
-  - **Agent 1:** Extracts product metadata from documents
-  - **Agent 2:** Vectorizes products and enriches ingredient data
-  - **Agent 3:** Filters products based on user preferences (free vector search)
-  - **Agent 4:** Generates natural language recommendations
-- Cost-optimized: Uses cheaper models where possible, free APIs for data enrichment
-- Real-time learning: Improves recommendations based on portfolio data
-
-### 🎯 Smart Search & Filtering
-- Vector-based semantic search (instant, no API costs)
-- Filter by: skin type, gender, life stage, product category
-- Multi-brand search across portfolios
-- Contextual recommendations based on user input
-
-### 👤 User & Admin Dashboards
-- **Admin Panel:** 
-  - Upload portfolios
-  - Manage brands
-  - Track analysis tasks
-  - **NEW: Access Product Database Editor**
-- **User Dashboard:** Browse brands, ask questions, get recommendations
-- Real-time task status updates
-- Product portfolio viewing with full metadata
-
-### 🔐 Secure Authentication
-- User registration and login
-- Admin controls for portfolio management
-- Session management
-- CSRF protection across localhost and production domains
+### Key Features
+✅ Multi-agent recommendation pipeline
+✅ Intelligent skincare routine detection
+✅ Life stage hierarchy filtering (Babies → Post-menopausal)
+✅ Product database editor with CRUD operations
+✅ Search logging & audit trail
+✅ Automatic ChromaDB synchronization
+✅ Support for multiple brands with independent product catalogs
 
 ---
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Docker & Docker Compose
-- OpenAI API key
-- PostgreSQL (included)
-- Redis (included)
-
-### Installation
-
-1. **Clone repository:**
-```bash
-git clone https://github.com/WernerDJ/dermacare-ai.git
-cd dermacare-ai
-```
-
-2. **Setup environment:**
-```bash
-cp .env.example .env
-# Edit .env with your OPENAI_API_KEY
-```
-
-3. **Start application:**
-```bash
-docker compose up -d
-```
-
-4. **Access:**
-- App: http://localhost
-- Admin: http://localhost/admin/ (login required)
-
-### First Time Setup
-
-1. **Create admin account:**
-```bash
-docker compose exec backend python manage.py createsuperuser
-# Username: admin
-# Password: (your choice)
-```
-
-2. **Upload first portfolio:**
-   - Go to Admin Panel
-   - Click "Upload Portfolio"
-   - Enter brand name (e.g., "Biotherm")
-   - List product names (one per line)
-   - Upload PDF/DOCX with product information
-   - Click "Analyze"
-
-3. **Edit products (optional):**
-   - Go to Admin Panel
-   - Click "Product Editor"
-   - Select a brand
-   - View, create, edit, or delete products
-   - Navigation buttons to move through records
-
-4. **Ask questions:**
-   - Go to Dashboard
-   - Select brand(s) to search
-   - Ask any skincare question
-   - Get AI recommendations
-
----
-
-## 📖 Usage Guide
-
-### For Administrators
-
-**Upload a Brand Portfolio:**
-1. Navigate to Admin Panel
-2. Fill in brand details:
-   - **Brand Name:** Company name (e.g., "Biotherm", "Sensilis")
-   - **Product Names:** List of products to extract (one per line)
-   - **Product Document:** PDF/DOCX with product information
-3. Check "Lookup Ingredients" to enrich with INCIDecoder data
-4. Click "Analyze"
-5. Monitor extraction progress in task list
-6. View extracted products in portfolio
-
-**Edit Products in Database:**
-1. Navigate to Admin Panel
-2. Click "Product Editor"
-3. Select a brand from the left panel
-4. Use navigation buttons to browse products:
-   - **⏮ First** - Jump to first product
-   - **◀ Previous** - Go to previous product
-   - **Next ▶** - Go to next product
-   - **Last ⏭** - Jump to last product
-5. Edit fields:
-   - Text fields: Click and type to edit
-   - Dropdown fields: Select from predefined options
-6. Click **Save** to update (see green success message)
-7. Click **Delete** to remove product
-8. Click **+ New** to create new product with empty fields
-
-**Manage Portfolios:**
-- View all uploaded brands with product counts
-- See portfolio creation dates
-- Delete brands if needed
-- Track extraction errors and retry
-
-### For End Users
-
-**Get Personalized Recommendations:**
-1. Go to Dashboard
-2. Select brands you want to search (or leave blank for all)
-3. Ask your skincare question:
-   - *"What's best for sensitive skin?"*
-   - *"I need a moisturizer for oily skin"*
-   - *"Products for menopausal women"*
-4. Receive AI-generated answer with:
-   - Top product recommendations
-   - Reasoning for each product
-   - How to use tips
-   - Ingredient highlights
-
----
-
-## 🏗️ Architecture
-
-### Data Pipeline
-Here's the complete README file:
-markdown# DermaCare AI - Dermocosmetic Product Advisor
-
-An intelligent AI-powered platform that helps users discover personalized skincare recommendations from brand portfolios. Upload brand product catalogs, automatically extract product metadata, and manage your product database with an intuitive editor.
-
-**Ask questions like:**
-- *"What Biotherm product is best for oily skin with acne?"*
-- *"Which products are suitable for teenagers?"*
-- *"Show me the most hydrating moisturizers"*
-- *"I'm a man with dry skin, give me a skincare routine"*
-
-Get AI-generated recommendations with detailed reasoning.
-
----
-
-## ✨ Key Features
-
-### 📚 Brand Portfolio Management
-- Upload brand product catalogs (PDF, DOCX, TXT)
-- Automatically extract product metadata (ingredients, benefits, usage)
-- Store up to 1000+ products per brand
-- Track analysis history and status
-
-### 🗄️ Product Database Editor (NEW)
-- **Direct database access** for administrators
-- **CRUD operations**: Create, Read, Update, Delete products
-- **Intuitive UI** with record navigation (First, Previous, Next, Last)
-- **Smart form fields**:
-  - Text inputs: Product name, Category, Description, Benefits, Usage, Ingredients
-  - Dropdown selects: Skin Type, Treatment Kind, Life Stage, Gender
-- **Instant feedback**: Save confirmations and error messages
-- **Batch editing**: Manage all products in a portfolio
-- **Real-time updates**: Changes appear immediately without page reload
-
-### 🤖 Intelligent Recommendation Engine
-- 4-specialized AI agents working in pipeline:
-  - **Agent 1:** Extracts product metadata from documents
-  - **Agent 2:** Vectorizes products and enriches ingredient data
-  - **Agent 3:** Filters products based on user preferences (AI-powered natural language filter extraction)
-  - **Agent 4:** Generates natural language recommendations
-- Cost-optimized: Uses cheaper models where possible, free APIs for data enrichment
-- Real-time learning: Improves recommendations based on portfolio data
-
-### 🎯 Smart Search & Filtering
-- Vector-based semantic search (instant, no API costs)
-- Filter by: skin type, gender, life stage, product category
-- Multi-brand search across portfolios
-- Contextual recommendations based on user input
-
-### 👤 User & Admin Dashboards
-- **Admin Panel:** 
-  - Upload portfolios
-  - Manage brands
-  - Track analysis tasks
-  - **NEW: Access Product Database Editor**
-- **User Dashboard:** Browse brands, ask questions, get recommendations
-- Real-time task status updates
-- Product portfolio viewing with full metadata
-
-### 🔐 Secure Authentication
-- User registration and login
-- Admin controls for portfolio management
-- Session management
-- CSRF protection across localhost and production domains
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Docker & Docker Compose
-- OpenAI API key
-- PostgreSQL (included)
-- Redis (included)
-
-### Installation
-
-1. **Clone repository:**
-```bash
-git clone https://github.com/WernerDJ/dermacare-ai.git
-cd dermacare-ai
-```
-
-2. **Setup environment:**
-```bash
-cp .env.example .env
-# Edit .env with your OPENAI_API_KEY
-```
-
-3. **Start application:**
-```bash
-docker compose up -d
-```
-
-4. **Access:**
-- App: http://localhost
-- Admin: http://localhost/admin/ (login required)
-
-### First Time Setup
-
-1. **Create admin account:**
-```bash
-docker compose exec backend python manage.py createsuperuser
-# Username: admin
-# Password: (your choice)
-```
-
-2. **Upload first portfolio:**
-   - Go to Admin Panel
-   - Click "Upload Portfolio"
-   - Enter brand name (e.g., "Biotherm")
-   - List product names (one per line)
-   - Upload PDF/DOCX with product information
-   - Click "Analyze"
-
-3. **Edit products (optional):**
-   - Go to Admin Panel
-   - Click "Product Editor"
-   - Select a brand
-   - View, create, edit, or delete products
-   - Navigation buttons to move through records
-
-4. **Ask questions:**
-   - Go to Dashboard
-   - Select brand(s) to search
-   - Ask any skincare question
-   - Get AI recommendations
-
----
-
-## 📖 Usage Guide
-
-### For Administrators
-
-**Upload a Brand Portfolio:**
-1. Navigate to Admin Panel
-2. Fill in brand details:
-   - **Brand Name:** Company name (e.g., "Biotherm", "Sensilis")
-   - **Product Names:** List of products to extract (one per line)
-   - **Product Document:** PDF/DOCX with product information
-3. Check "Lookup Ingredients" to enrich with INCIDecoder data
-4. Click "Analyze"
-5. Monitor extraction progress in task list
-6. View extracted products in portfolio
-
-**Edit Products in Database:**
-1. Navigate to Admin Panel
-2. Click "Product Editor"
-3. Select a brand from the left panel
-4. Use navigation buttons to browse products:
-   - **⏮ First** - Jump to first product
-   - **◀ Previous** - Go to previous product
-   - **Next ▶** - Go to next product
-   - **Last ⏭** - Jump to last product
-5. Edit fields:
-   - Text fields: Click and type to edit
-   - Dropdown fields: Select from predefined options
-6. Click **Save** to update (see green success message)
-7. Click **Delete** to remove product
-8. Click **+ New** to create new product with empty fields
-
-**Manage Portfolios:**
-- View all uploaded brands with product counts
-- See portfolio creation dates
-- Delete brands if needed
-- Track extraction errors and retry
-
-### For End Users
-
-**Get Personalized Recommendations:**
-1. Go to Dashboard
-2. Select brands you want to search (or leave blank for all)
-3. Ask your skincare question:
-   - *"What's best for sensitive skin?"*
-   - *"I need a moisturizer for oily skin"*
-   - *"Products for menopausal women"*
-4. Receive AI-generated answer with:
-   - Top product recommendations
-   - Reasoning for each product
-   - How to use tips
-   - Ingredient highlights
-
----
-
-## 🏗️ Architecture
-
-### Data Pipeline
-Upload PDF/DOCX
-↓
-Agent 1: Extract Metadata
-
-Product name, category, benefits
-Skin type, gender, life stage
-Ingredients, usage instructions
-↓
-PostgreSQL Database
-↓
-Agent 2: Vectorize & Enrich
-Convert to embeddings
-Enrich missing ingredients
-Store in ChromaDB
-↓
-Ready for Queries & Editing
-↓
-User Question OR Admin Edit
-↓
-Agent 3: Intelligent Filter
-model= gpt-4.1 + ChromaDB Vector Search
-Uses OpenAI to intelligently extract metadata filters (gender, skin type, life stage, treatment kind) 
-from user queries, then performs semantic search on ChromaDB with structured filtering.
-
-↓
-Agent 4: Answer (OpenAI)
-Generate recommendations
-Provide reasoning
-↓
-Natural Language Response
-
-### Why 4 Agents?
-
-- **Specialization:** Each agent does one thing well
-- **Cost Efficiency:** Expensive LLMs only used when needed
-- **Speed:** Parallel processing, fast vector searches
-- **Accuracy:** Focused prompts lead to better results
-
----
-
-## 🛠️ Technical Stack
+## 🏗️ Technology Stack
 
 | Component | Technology |
-|-----------|-----------|
-| Backend | Django 4.2 |
-| Database | PostgreSQL |
-| Vector DB | ChromaDB |
-| Task Queue | Celery + Redis |
-| LLM | OpenAI (GPT-4o-mini / GPT-4.1) |
-| Frontend | Django Templates |
-| Deployment | Docker Compose |
-| Auth | Django Built-in |
-
-### Requirements
-- Python 3.11+
-- Docker 24+
-- 2GB RAM minimum
-- 5GB storage (for vector DB)
+|-----------|------------|
+| **Backend** | Django 4.2 |
+| **Database** | PostgreSQL |
+| **Cache/Queue** | Redis |
+| **Task Queue** | Celery |
+| **Vector Search** | ChromaDB |
+| **LLM Provider** | OpenAI API |
+| **Containerization** | Docker Compose |
+| **Frontend** | Django Templates |
 
 ---
 
-## 📊 Performance
+## 🤖 The Multi-Agent System
 
-- **Extraction:** 70 products in ~45 seconds
-- **Search Latency:** <100ms per query
-- **Editor Responsiveness:** Instant form updates
-- **Enrichment Coverage:** 95%+ of products
-- **Scalability:** Handles 1000+ products per brand
-- **Concurrent Users:** 50+ simultaneous users
+### Agent 1: Product Extractor
+**Model**: `gpt-4o-mini`
+- Extracts structured product information from PDFs/documents
+- Generates: product names, benefits, ingredients, usage instructions
+- Outputs: List of products with full metadata
+
+### Agent 2: Vectorizer  
+**Technology**: ChromaDB + OpenAI embeddings
+- Converts product descriptions to semantic vectors
+- Enriches ingredients with INCI standards
+- Stores embeddings in ChromaDB collections (one per brand)
+- Zero-cost semantic search
+
+### Agent 3: Intelligent Filter
+**Model**: `gpt-4.1` (GPT-4 Turbo - smartest non-reasoning model)
+- **AI-powered filter extraction**: Understands user queries in natural language
+- **Extracts metadata**: Gender, skin type, life stage, treatment kind
+- **Hierarchical filtering**: 
+  - Teenagers can use products for older age groups
+  - Adults can use menopausal/post-menopausal products
+  - All ages can use "all ages" products
+- **Routine detection**: When user asks for "skincare routine", returns diverse product types (cleanser + serum + moisturizer + SPF)
+- **Combines**: Semantic similarity + metadata constraints
+
+### Agent 4: Answer Generator
+**Model**: `gpt-4o-mini`
+- Takes filtered products and user query
+- Generates personalized skincare recommendations
+- Provides usage instructions and benefits
+- Cites specific products from the filtered results
 
 ---
 
-## 🔧 Configuration
+## 📋 Product Database Editor
 
-### Environment Variables
+**URL**: `/product-editor/`
+
+Allows admins to:
+- 🏷️ **Browse** products by brand (sidebar)
+- ➕ **Create** new products with unique names
+- ✏️ **Edit** all product fields (name, category, skin type, life stage, gender, benefits, ingredients, etc.)
+- 🗑️ **Delete** products
+- ⬅️ **Navigate** between products (First/Previous/Next/Last)
+- 💾 **Save** changes instantly
+- 🔄 **Sync to ChromaDB** - Updates product count and re-vectorizes all products
+
+### Product Fields
+- **Name** (unique per portfolio)
+- **Category** (Cleanser, Serum, Moisturizer, etc.)
+- **Skin Type** (All, Oily, Dry, Sensitive, Combination)
+- **Life Stage** (All ages, Babies, Children, Teenagers, Adults, Menopausal, Post-menopausal)
+- **Gender** (Unisex, Male, Female)
+- **Treatment Kind** (Acne, Anti-aging, Rosacea, Hydration, Brightening, Firming, Sun protection, etc.)
+- **Benefits** (Rich text field)
+- **How to Use** (Rich text field)
+- **Ingredients** (PDF-extracted or manual)
+
+---
+
+## 📊 Search Logs
+
+**URL**: `/search-logs/`
+
+Comprehensive audit trail of all user searches:
+- User who asked
+- Question asked
+- **Agent 3 Extracted Filters** (what metadata was detected)
+- **Agent 3 Products Found** (which products matched)
+- **Agent 4 Response** (the final recommendation)
+- Brands searched
+- Timestamp
+
+Helps debug and understand how the system is interpreting queries.
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Docker & Docker Compose
+- OpenAI API key
+- INCI API key (optional, for ingredient enrichment)
+
+### Setup
 
 ```bash
-# Required
-OPENAI_API_KEY=sk-...
-SECRET_KEY=your-secret-key
-
-# Database
-DB_ENGINE=django.db.backends.postgresql
-DB_NAME=dermacare_db
-DB_USER=dermacare_user
-DB_PASSWORD=dermacare_pass
-DB_HOST=db
-DB_PORT=5432
-
-# Redis
-CELERY_BROKER_URL=redis://redis:6379/0
-
-# Security
-DEBUG=False
-ALLOWED_HOSTS=localhost,127.0.0.1,ip-xpert.com,www.ip-xpert.com
-
-# CSRF
-CSRF_TRUSTED_ORIGINS=https://ip-xpert.com,https://www.ip-xpert.com
-```
-
----
-
-## 🧪 Testing
-
-Run test suite:
-
-```bash
-docker compose exec backend python manage.py test api.tests -v 2
-```
-
-Current coverage: **28 tests passing**
-- Auth flows (login, signup, logout)
-- Admin controls and access
-- Portfolio upload and deletion
-- Dashboard functionality
-
----
-
-## 📦 API Endpoints
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| GET/POST | `/login/` | User login |
-| GET/POST | `/signup/` | User registration |
-| GET | `/logout/` | User logout |
-| GET/POST | `/admin/` | Admin panel |
-| GET/POST | `/product-editor/` | Product database editor |
-| POST | `/api/product-editor/` | Editor API (CRUD) |
-| GET/POST | `/dashboard/` | User Q&A interface |
-| GET | `/api/task/<id>/status/` | Check task progress |
-
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Setup
-
-```bash
-# Clone and setup
-git clone https://github.com/yourusername/dermacare-ai.git
+# Clone repository
+git clone https://github.com/WernerDJ/dermacare-ai
 cd dermacare-ai
 
-# Install dependencies
-pip install -r backend/requirements_backend.txt
+# Create .env file
+cat > .env << EOF
+DEBUG=False
+SECRET_KEY=your-secret-key-here
+OPENAI_API_KEY=sk-...
+INCI_API=your-inci-api-key
+ALLOWED_HOSTS=localhost,127.0.0.1,yourdomain.com
+EOF
+
+# Start services
+docker compose up -d
 
 # Run migrations
-python backend/manage.py migrate
+docker compose exec backend python manage.py migrate
 
-# Start dev server
-python backend/manage.py runserver
+# Create admin user
+docker compose exec backend python manage.py createsuperuser
+
+# Access the app
+# Admin: http://localhost/admin/
+# Dashboard: http://localhost/dashboard/
+# Editor: http://localhost/product-editor/
+# Logs: http://localhost/search-logs/
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## 📝 Portfolio Management
 
-### CSRF Token Errors
-- Check `CSRF_TRUSTED_ORIGINS` in settings
-- Clear browser cookies
-- Ensure HTTPS for production
-- Verify domain is spelled correctly (e.g., not `wwww.ip-xpert.com`)
+### Uploading a Portfolio
 
-### Product Editor Shows No Data
-- Verify products were extracted successfully
-- Check portfolio has products: `docker compose exec backend python manage.py shell`
-- ```python
-  from api.models import Product, BrandPortfolio
-  portfolio = BrandPortfolio.objects.get(name='YourBrand')
-  print(Product.objects.filter(portfolio=portfolio).count())
+1. Go to Django admin: `/admin/`
+2. Click "Brand Portfolios" → "Add Portfolio"
+3. Fill in brand name and upload PDF/document
+4. System will:
+   - ✅ Extract products via Agent 1
+   - ✅ Vectorize to ChromaDB via Agent 2
+   - ✅ Save to PostgreSQL
+   - ✅ Auto re-vectorize to ensure sync
+   - ✅ Update product count
+
+### Current Portfolios
+
+| Brand | Products | Status |
+|-------|----------|--------|
+| Biotherm | 55 | ✅ Ready |
+| Rilastil | 60 | ✅ Ready |
+| Eucerin | 70 | ✅ Ready |
+| La Roche Posay | 24 | ✅ Ready |
+| The Ordinary | 30+ | ✅ Ready |
+
+### Syncing Products
+
+If products exist in PostgreSQL but not in ChromaDB:
+
+**Via UI**: Go to Product Editor → Select brand → Click **🔄 Sync to ChromaDB**
+
+**Via CLI**:
+```bash
+# Check all portfolios
+docker compose exec backend python manage.py sync_chroma
+
+# Fix all mismatches
+docker compose exec backend python manage.py sync_chroma --fix-all
+
+# Fix specific brand
+docker compose exec backend python manage.py sync_chroma --brand "La Roche Posay"
+```
+
+---
+
+## 🔍 Example Queries
+
+### Skincare Routine (Detects diverse product types)
+**Query**: "I'm a 40-year-old woman with dry skin, I need a complete morning and evening routine"
+
+**Response**: Cleanser + Serum + Moisturizer + SPF in morning, Cleanser + Serum + Night cream in evening
+
+### Specific Treatment
+**Query**: "Best sunscreen for my 5-year-old with atopic dermatitis"
+
+**Response**: Products filtered for: Life stage=Children, Skin type=Sensitive, Treatment=Sun protection
+
+### Advanced Search
+**Query**: "I'm menopausal with acne-prone skin, looking for a serum with Niacinamide"
+
+**Response**: Products filtered for: Gender=Female, Life stage=Menopausal, Treatment=Acne, Ingredients match Niacinamide
+
+---
+
+## 🛠️ Configuration
+
+### Environment Variables (.env)
+
+```bash
+DEBUG=False
+SECRET_KEY=your-secret-key
+OPENAI_API_KEY=sk-...
+INCI_API=optional-inci-key
+ALLOWED_HOSTS=localhost,127.0.0.1,yourdomain.com
+DB_NAME=dermacare_db
+DB_USER=dermacare_user
+DB_PASSWORD=secure-password
+DB_HOST=db
+DB_PORT=5432
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/0
+```
+
+### Django Settings (backend/dermacare/settings.py)
+
+Key configurations:
+- CSRF_TRUSTED_ORIGINS: Add your domain
+- LOGGING: File logging (optional)
+- REST_FRAMEWORK: Token auth for API endpoints
+
+---
+
+## 📂 Project Structure
+dermacare-ai/
+├── .env
+├── docker-compose.yml
+├── README.md
+├── .gitignore
+├── chroma_db/ # Vector database storage
+├── backend/
+│ ├── dermacare/ # Django project settings
+│ │ ├── settings.py
+│ │ ├── urls.py
+│ │ └── wsgi.py
+│ ├── api/
+│ │ ├── models.py # Product, BrandPortfolio, AnalysisTask, SearchLog
+│ │ ├── views.py # Dashboard, editor, API endpoints
+│ │ ├── urls.py
+│ │ ├── tasks.py # Celery tasks with auto-vectorization
+│ │ ├── admin.py # Django admin customization
+│ │ ├── agents/
+│ │ │ ├── agent1_extractor.py # PDF → Product extraction
+│ │ │ ├── agent2_vectorizer.py # Products → ChromaDB
+│ │ │ ├── agent3_filter.py # Query → Metadata + Semantic filtering
+│ │ │ └── agent4_answerer.py # Recommendations generation
+│ │ ├── management/
+│ │ │ └── commands/
+│ │ │ └── sync_chroma.py # Manual ChromaDB sync
+│ │ └── templates/
+│ │ ├── base.html
+│ │ ├── login.html # Modern Cetaphil-style login
+│ │ ├── signup.html
+│ │ ├── user_dashboard.html # Q&A interface
+│ │ ├── admin_panel.html # Admin controls
+│ │ ├── product_editor.html # CRUD products
+│ │ └── search_logs.html # Audit trail
+│ └── Dockerfile_backend
+└── Dockerfile (docker-compose orchestration)
+---
+
+## 🧪 Testing the System
+
+### 1. Ask a Question
+### 2. View Search Log
+- Go to `/search-logs/`
+- Click "View" on your search
+- See extracted filters, products found, and full recommendation
+
+### 3. Edit & Sync
+- Go to `/product-editor/`
+- Add/edit products
+- Click "🔄 Sync to ChromaDB"
+- System syncs to vector database automatically
+
+---
+
+## 🐛 Known Issues & Solutions
+
+### Products in DB but not in ChromaDB
+**Symptom**: Product appears in admin but not in search results
+
+**Solution**:
+```bash
+# Use the Sync command
+docker compose exec backend python manage.py sync_chroma --fix-all
+```
+### Celery Task Failures
+**Check logs**:
+```bash
+docker compose logs celery | tail -50
+```
+
+**Common cause**: Model cache in Celery container. Solution:
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+---
+
+## 🔐 Security
+
+- ✅ CSRF protection enabled
+- ✅ Login required for dashboard
+- ✅ Admin-only product editor
+- ✅ Secure session cookies
+- ✅ API endpoints authenticated
+- ✅ No API keys in repository
+
+---
+
+## 📜 License
+
+Proprietary - All rights reserved
+
+---
+
+## 📞 Support
+
+For issues:
+1. Check `/search-logs/` for debugging info
+2. Review backend logs: `docker compose logs backend`
+3. Verify ChromaDB sync: `docker compose exec backend python manage.py sync_chroma`
+
+---
+
+**Last Updated**: July 2026  
