@@ -120,7 +120,7 @@
                     <div class="card-footer">
                         <button type="button" class="btn btn-primary" onclick="saveProduct()">💾 Save</button>
                         <button type="button" class="btn btn-danger" onclick="deleteProduct()">🗑 Delete</button>
-                        <button type="button" class="btn btn-info ms-2" onclick="refreshCount()">🔄 Refresh Count</button>
+                        <button type="button" class="btn btn-warning ms-2" onclick="syncToChromaDB()">🔄 Sync to ChromaDB</button>
                     </div>
                 </div>
 
@@ -316,8 +316,14 @@ function newRecord() {
     .catch(err => showMessage('❌ Network error: ' + err, 'danger'));
 }
 
-function refreshCount() {
+function syncToChromaDB() {
     const portfolioId = document.getElementById('portfolioId').value;
+    
+    // Show loading state
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Syncing...';
     
     fetch('{% url "product_editor_api" %}', {
         method: 'POST',
@@ -325,25 +331,25 @@ function refreshCount() {
             'Content-Type': 'application/json',
             'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
         },
-        body: JSON.stringify({action: 'refresh_count', portfolio_id: portfolioId})
+        body: JSON.stringify({action: 'sync_chroma', portfolio_id: portfolioId})
     })
     .then(r => r.json())
     .then(d => {
         if (d.success) {
-            showMessage('✅ Portfolio count updated to ' + d.new_count + ' products', 'success');
+            showMessage(
+                `✅ Synced! Product count: ${d.new_count} | ChromaDB: ${d.chroma_count}`,
+                'success'
+            );
             document.getElementById('totalCount').textContent = d.new_count;
         } else {
-            showMessage('❌ Error refreshing count', 'danger');
+            showMessage('❌ ' + (d.error || 'Error syncing to ChromaDB'), 'danger');
         }
     })
-    .catch(err => showMessage('❌ Network error: ' + err, 'danger'));
-}
-
-// Load first record on page load
-window.onload = function() {
-    if (products.length > 0) {
-        loadProduct(0);
-    }
+    .catch(err => showMessage('❌ Network error: ' + err, 'danger'))
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
 }
 </script>
 

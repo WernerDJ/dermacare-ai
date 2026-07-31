@@ -383,6 +383,53 @@ def product_editor_api(request, product_id=None):
             portfolio.total_products = count
             portfolio.save()
             return JsonResponse({'success': True, 'new_count': count})
+            
+        elif action == 'sync_chroma':
+            from .agents import Agent2Vectorizer
+            import chromadb
+            
+            portfolio_id = data.get('portfolio_id')
+            portfolio = BrandPortfolio.objects.get(id=portfolio_id)
+            
+            try:
+                # Step 1: Update product count
+                db_count = Product.objects.filter(portfolio=portfolio).count()
+                portfolio.total_products = db_count
+                portfolio.save()
+                
+                # Step 2: Re-vectorize to ChromaDB
+                products = Product.objects.filter(portfolio=portfolio)
+                products_list = [
+                    {
+                        'product': p.name,
+                        'brand': portfolio.name,
+                        'skin_type': p.skin_type,
+                        'treatment_kind': p.treatment_kind,
+                        'skin_problems': [],
+                        'body_parts': ['Face'],
+                        'life_stage': p.life_stage,
+                        'gender': p.gender,
+                        'ingredients': p.pdf_ingredients,
+                        'usage': p.how_to_use,
+                        'benefits': p.benefits,
+                    }
+                    for p in products
+                ]
+                
+                vectorizer = Agent2Vectorizer(chroma_db_path="/app/chroma_db")
+                stored_count, _ = vectorizer.vectorize_products(products_list, portfolio.name)
+                
+                return JsonResponse({
+                    'success': True,
+                    'new_count': db_count,
+                    'chroma_count': stored_count,
+                    'message': f'Synced {db_count} products to ChromaDB'
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'error': str(e)
+                }, status=400)
 
         elif action == 'create':
             portfolio_id = data.get('portfolio_id')

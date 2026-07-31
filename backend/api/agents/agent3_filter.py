@@ -47,37 +47,50 @@ class Agent3Filter:
         api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
         self.openai_client = OpenAI(api_key=api_key)
     
-    def extract_filters_from_query(self, query: str) -> Dict:
+    def extract_filters_from_query(self, query: str, available_treatments: List[str] = None, available_categories: List[str] = None) -> Dict:
         """
         Use OpenAI to intelligently extract metadata filters from user query
         
-        Returns:
-            Dict with keys: gender, skin_type, life_stage, treatment_kind
+        Now knows all possible treatment_kind and category values in the database
         """
+        
+        # Build context about available options
+        treatments_str = ", ".join(available_treatments) if available_treatments else "Not provided"
+        categories_str = ", ".join(available_categories) if available_categories else "Not provided"
         
         extraction_prompt = f"""Analyze this skincare question and extract relevant filters.
 
-Question: "{query}"
+    Question: "{query}"
 
-Available filter options:
-- Gender: male, female, unisex (or null if not specified)
-- Skin Type: oily, dry, sensitive, combination, all (or null if not specified)
-- Life Stage: babies, children, teenagers, adults, menopausal, post-menopausal, all ages (or null if not specified)
-- Treatment Kind: acne, anti-aging, rosacea, hyperpigmentation, eczema, psoriasis, hydration, brightening, firming, sun protection (or any other specific concern mentioned)
+    IMPORTANT: Only use treatment kinds and categories that exist in our database!
 
-Respond ONLY with valid JSON, no other text:
-{{
-    "gender": "value or null",
-    "skin_type": "value or null",
-    "life_stage": "value or null",
-    "treatment_kind": "value or null",
-    "reasoning": "Brief explanation of what you extracted"
-}}"""
+    Available treatment kinds:
+    {treatments_str}
+
+    Available categories:
+    {categories_str}
+
+    Available filter options:
+    - Gender: male, female, unisex (or null if not specified)
+    - Skin Type: oily, dry, sensitive, combination, all (or null if not specified)
+    - Life Stage: babies, children, teenagers, adults, menopausal, post-menopausal, all ages (or null if not specified)
+    - Treatment Kind: Choose from available list above (or null if not specified)
+    - Category: Choose from available list above (or null if not specified)
+
+    Respond ONLY with valid JSON, no other text:
+    {{
+        "gender": "value or null",
+        "skin_type": "value or null",
+        "life_stage": "value or null",
+        "treatment_kind": "value or null",
+        "category": "value or null",
+        "reasoning": "Brief explanation of what you extracted"
+    }}"""
         
         try:
             with trace("Agent3: OpenAI Filter Extraction"):
                 response = self.openai_client.messages.create(
-                    model="GPT-4.1",
+                    model="gpt-4.1",
                     max_tokens=500,
                     messages=[
                         {"role": "user", "content": extraction_prompt}
@@ -86,11 +99,8 @@ Respond ONLY with valid JSON, no other text:
                 
                 response_text = response.content[0].text
                 
-                # Parse JSON response
                 try:
                     filters = json.loads(response_text)
-                    
-                    # Clean up null values
                     filters = {k: v for k, v in filters.items() if v is not None and k != "reasoning"}
                     
                     self.logger.info(f"OpenAI extracted filters: {filters}")
@@ -104,14 +114,39 @@ Respond ONLY with valid JSON, no other text:
         except Exception as e:
             self.logger.error(f"OpenAI filter extraction failed: {str(e)}")
             return {}
-        
+
     def search_products(self, query: str, brand_names: List[str], top_k: int = 5) -> List[Dict]:
         """
         Search products using metadata filtering + semantic search
-        Handles routine queries specially to return diverse products
         """
         
         with trace(f"Agent3: Smart Search - '{query}'"):
+            # Load available filter options from database
+            from api.models import Product
+            
+            # Get all unique treatment_kind values
+            all_treatments = set()
+            all_categories = set()
+            
+            for product in Product.objects.exclude(treatment_kind='').exclude(treatment_kind__isnull=True):
+                # Handle pipe-separated values
+                treatments = [t.strip() for t in product.treatment_kind.split('|')]
+                all_treatments.update(treatments)
+            
+            for product in Product.objects.exclude(category='').exclude(category__isnull=True):
+                categories = [c.strip() for c in product.category.split('|')]
+                all_categories.update(categories)
+            
+            available_treatments = sorted(list(all_treatments))
+            available_categories = sorted(list(all_categories))
+            
+            self.logger.info(f"Available treatments: {available_treatments}")
+            self.logger.info(f"Available categories: {available_categories}")
+            
+            # Step 1: Use OpenAI to extract filters with knowledge of available options
+            filters = self.extract_filters_from_query(query, available_treatments, available_categories)
+            self.logger.info(f"Applied filters: {filters}")
+            
             query_lower = query.lower()
             
             # Detect routine queries
@@ -120,23 +155,12 @@ Respond ONLY with valid JSON, no other text:
                 'morning and evening', 'day and night', 'cleanser', 'serum', 'moisturizer'
             ])
             
-            # For routines: be more permissive and get more products
             if is_routine_query:
-                top_k = 15  # Get 15 instead of 5
-                relevance_threshold = 2.5  # More lenient threshold
+                top_k = 15
+                relevance_threshold = 2.5
                 self.logger.info(f"🔄 Routine query detected - getting {top_k} diverse products")
             else:
                 relevance_threshold = 2.0
-            
-            # Step 1: Use OpenAI to extract filters
-            filters = self.extract_filters_from_query(query)
-            
-            # For routines, don't filter by treatment_kind (user wants variety)
-            if is_routine_query and 'treatment_kind' in filters:
-                self.logger.info(f"Routine query: ignoring treatment_kind filter '{filters['treatment_kind']}' for diversity")
-                del filters['treatment_kind']
-            
-            self.logger.info(f"Applied filters: {filters}")
             
             all_results = []
             
@@ -149,16 +173,14 @@ Respond ONLY with valid JSON, no other text:
                     self.logger.warning(f"Collection not found: {collection_name}")
                     continue
                 
-                # Vector search
                 results = collection.query(
                     query_texts=[query],
-                    n_results=top_k * 3  # Get even more to filter
+                    n_results=top_k * 3
                 )
                 
                 if not results['ids'] or len(results['ids'][0]) == 0:
                     continue
                 
-                # Filter by metadata constraints
                 for i, doc_id in enumerate(results['ids'][0]):
                     distance = results['distances'][0][i] if 'distances' in results else 999
                     metadata = results['metadatas'][0][i]
@@ -178,10 +200,8 @@ Respond ONLY with valid JSON, no other text:
                     }
                     all_results.append(result)
             
-            # Sort by relevance
             all_results.sort(key=lambda x: x['distance'] if x['distance'] is not None else float('inf'))
             
-            # For routines: prefer product type diversity
             if is_routine_query:
                 diverse_results = self._select_diverse_products(all_results, top_k)
                 self.logger.info(f"Agent3: Returned {len(diverse_results)} diverse products for routine")
@@ -190,6 +210,7 @@ Respond ONLY with valid JSON, no other text:
                 filtered_results = all_results[:top_k]
                 self.logger.info(f"Agent3: Returned {len(filtered_results)} products")
                 return filtered_results
+
 
     def _select_diverse_products(self, all_results: List[Dict], top_k: int) -> List[Dict]:
         """
@@ -238,6 +259,7 @@ Respond ONLY with valid JSON, no other text:
     def _matches_filters(self, product_metadata: Dict, filters: Dict) -> bool:
         """
         Check if product metadata matches all extracted filters
+        Handles pipe-separated values for treatment_kind and category
         """
         
         # Gender filter
@@ -263,12 +285,28 @@ Respond ONLY with valid JSON, no other text:
                 if product_life_stage not in allowed_stages:
                     return False
         
-        # Treatment kind filter
+        # Treatment kind filter (handles pipe-separated values)
         if 'treatment_kind' in filters:
-            product_treatment = product_metadata.get('treatment_kind', '').lower()
+            product_treatments = product_metadata.get('treatment_kind', '').lower()
             
-            if product_treatment:
-                if product_treatment != filters['treatment_kind'].lower():
+            if product_treatments:
+                # Split by pipe and check if any match
+                treatment_list = [t.strip() for t in product_treatments.split('|')]
+                user_treatment = filters['treatment_kind'].lower()
+                
+                if user_treatment not in treatment_list:
+                    return False
+        
+        # Category filter (handles pipe-separated values)
+        if 'category' in filters:
+            product_categories = product_metadata.get('category', '').lower()
+            
+            if product_categories:
+                # Split by pipe and check if any match
+                category_list = [c.strip() for c in product_categories.split('|')]
+                user_category = filters['category'].lower()
+                
+                if user_category not in category_list:
                     return False
         
         return True
