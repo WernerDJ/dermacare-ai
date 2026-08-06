@@ -47,26 +47,44 @@ class Product(models.Model):
     SKIN_TYPE_CHOICES = [
         ('all', 'All'),
         ('dry', 'Dry'),
-        ('oily', 'Oily'),
         ('sensitive', 'Sensitive'),
         ('combination', 'Combination'),
+        ('normal_to_oily', 'Normal to Oily'),
+        ('normal_to_dry', 'Normal to Dry'),
+        ('atopic', 'Atopic'),
+        ('hyperkeratosis', 'Hyperkeratosis'),
+        ('itchy', 'Itchy'),
+    ]
+
+    # Category choices - UPDATED
+    CATEGORY_CHOICES = [
+        ('cleanser', 'Cleanser'),
+        ('serum', 'Serum'),
+        ('cream', 'Cream'),
+        ('lotion', 'Lotion'),
+        ('foundation', 'Foundation'),
+        ('thermal_water', 'Thermal Water'),
+        ('sunscreen', 'Sunscreen'),
+        ('stick', 'Stick'),
+        ('bar', 'Bar'),
+        ('gel', 'Gel'),
+        ('balsam', 'Balsam'),
+        ('spray', 'Spray'),
+        ('shampoo', 'Shampoo'),
     ]
     
-    portfolio = models.ForeignKey(BrandPortfolio, on_delete=models.CASCADE, related_name='products')
-    name = models.CharField(max_length=500)
-    description = models.TextField(blank=True)
-    category = models.CharField(max_length=100, blank=True)
-    benefits = models.TextField(blank=True)
-    how_to_use = models.TextField(blank=True)
-    pdf_ingredients = models.TextField(blank=True, help_text="Ingredients found in PDF")
-    
-    # New fields from Agent 1
+    portfolio = models.ForeignKey(BrandPortfolio, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255, unique=False)
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='cream')
+    description = models.TextField(blank=True, null=True)
+    benefits = models.TextField(blank=True, null=True)
+    how_to_use = models.TextField(blank=True, null=True)
+    pdf_ingredients = models.TextField(blank=True, null=True)
     skin_type = models.CharField(max_length=50, choices=SKIN_TYPE_CHOICES, default='all')
-    treatment_kind = models.CharField(max_length=100, blank=True)
-    life_stage = models.CharField(max_length=50, choices=LIFE_STAGE_CHOICES, default='all')
+    treatment_kind = models.CharField(max_length=255, blank=True, null=True, help_text="Pipe-separated values (e.g., anti-ageing | moisturizer)")
+    life_stage = models.CharField(max_length=50, choices=LIFE_STAGE_CHOICES, default='all ages')
     gender = models.CharField(max_length=20, choices=GENDER_CHOICES, default='unisex')
-    
-    created_date = models.DateTimeField(auto_now_add=True)
+    created_date = models.DateTimeField(auto_now_add=True, null=True)
     updated_date = models.DateTimeField(auto_now=True)
     
     class Meta:
