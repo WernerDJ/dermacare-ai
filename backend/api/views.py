@@ -430,7 +430,7 @@ def product_editor_api(request, product_id=None):
                     'success': False,
                     'error': str(e)
                 }, status=400)
-
+                
         elif action == 'create':
             portfolio_id = data.get('portfolio_id')
             try:
@@ -441,15 +441,18 @@ def product_editor_api(request, product_id=None):
                 product = Product.objects.create(
                     portfolio_id=portfolio_id,
                     name=unique_name,
+                    description='',  # ADD THIS
+                    category='cream',
                     skin_type='all',
-                    life_stage='all',
-                    gender='unisex'
+                    life_stage='all ages',
+                    gender='unisex',
+                    benefits='',  # ADD THIS
+                    how_to_use='',  # ADD THIS
+                    pdf_ingredients=''  # ADD THIS
                 )
                 return JsonResponse({'success': True, 'product_id': product.id})
             except Exception as e:
                 return JsonResponse({'success': False, 'error': str(e)}, status=400)
-    
-    return JsonResponse({'error': 'Invalid request'}, status=400)
 
 @login_required
 @user_passes_test(is_admin)

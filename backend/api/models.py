@@ -7,7 +7,7 @@ class BrandPortfolio(models.Model):
     Represents a brand's product portfolio analysis
     """
     name = models.CharField(max_length=255, unique=True)
-    description = models.TextField(blank=True)
+    description = models.TextField(blank=True, null=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='portfolios')
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
@@ -75,7 +75,7 @@ class Product(models.Model):
     
     portfolio = models.ForeignKey(BrandPortfolio, on_delete=models.CASCADE)
     name = models.CharField(max_length=255, unique=False)
-    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='cream')
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='cream', blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     benefits = models.TextField(blank=True, null=True)
     how_to_use = models.TextField(blank=True, null=True)
