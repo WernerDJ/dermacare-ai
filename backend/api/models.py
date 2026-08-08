@@ -47,6 +47,7 @@ class Product(models.Model):
     SKIN_TYPE_CHOICES = [
         ('all', 'All'),
         ('dry', 'Dry'),
+        ('oily', 'Oily'),
         ('sensitive', 'Sensitive'),
         ('combination', 'Combination'),
         ('normal_to_oily', 'Normal to Oily'),
@@ -69,6 +70,7 @@ class Product(models.Model):
         ('bar', 'Bar'),
         ('gel', 'Gel'),
         ('balsam', 'Balsam'),
+        ('ointment', 'Ointment'),
         ('spray', 'Spray'),
         ('shampoo', 'Shampoo'),
     ]
