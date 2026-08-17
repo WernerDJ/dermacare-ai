@@ -19,7 +19,7 @@
                 {% if portfolios %}
                     {% for portfolio in portfolios %}
                         <div class="checkbox">
-                            <input type="checkbox" id="brand_{{ portfolio.id }}" name="brand_ids" value="{{ portfolio.id }}" checked>
+                            <input type="checkbox" id="brand_{{ portfolio.id }}" name="brand_ids" value="{{ portfolio.id }}" unchecked>
                             <label for="brand_{{ portfolio.id }}">{{ portfolio.name }} ({{ portfolio.total_products }} products)</label>
                         </div>
                     {% endfor %}
