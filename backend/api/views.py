@@ -243,24 +243,44 @@ def user_dashboard(request):
     
     return render(request, 'user_dashboard.html', context)
 
-def get_ai_response(question, brand_ids):
+def get_ai_response(question, brand_ids, top_k=5):
     """Get AI response using Agent 3 + 4"""
     
     from .agents import Agent3Filter, Agent4Answerer
+    from .agents.agent3_5_enricher import Agent35Enricher
     
-    # Get brand names
     portfolios = BrandPortfolio.objects.filter(id__in=brand_ids)
     brand_names = list(portfolios.values_list('name', flat=True))
     
     if not brand_names:
         return None, [], [], 0, {}, []
     
+    # AGENT 3.5: Extract excluded ingredients and enrich query
+    enricher = Agent35Enricher()
+    excluded_ingredients = enricher.extract_excluded_ingredients(question)
+    
+    ingredient_keywords = ['without', 'contains', 'ingredient', 'chemical', 'compound', 
+                          'avoids', 'excludes', 'free from', 'no ', 'avoid']
+    question_lower = question.lower()
+    needs_enrichment = any(keyword in question_lower for keyword in ingredient_keywords)
+    
+    search_question = question
+    
+    if needs_enrichment:
+        search_question = enricher.enrich_query(question)
+        if search_question != question:
+            logger.info(f"Agent 3.5 enriched: '{question}' → '{search_question}'")
+    
     # Agent 3: Filter products
     agent3 = Agent3Filter(chroma_db_path="/app/chroma_db")
-    filtered_products = agent3.search_products(question, brand_names, top_k=10)
+    filtered_products = agent3.search_products(search_question, brand_names, top_k=top_k*2)  # Get more to account for filtering
     
-    # Extract Agent 3 filters for logging
-    agent3_filters = agent3.extract_filters_from_query(question)
+    # AGENT 3.5: Filter out products with excluded ingredients
+    if excluded_ingredients:
+        filtered_products = enricher.filter_products_by_excluded_ingredients(filtered_products, excluded_ingredients)
+    
+    # Extract Agent 3 filters
+    agent3_filters = agent3.extract_filters_from_query(search_question)
     agent3_products = [p['metadata'] for p in filtered_products]
     
     if not filtered_products:
@@ -272,15 +292,16 @@ def get_ai_response(question, brand_ids):
     # Agent 4: Generate answer
     agent4 = Agent4Answerer(openai_api_key=os.getenv("OPENAI_API_KEY"))
     answer, referenced_products = agent4.answer_question(
-        question=question, 
-        brand_names=brand_names, 
-        top_k=10
+        question=question,
+        brand_names=brand_names,
+        top_k=top_k
     )
     
-    # Extract product names for display
     products_referenced = [p['metadata'].get('product', 'Unknown') for p in filtered_products if p.get('metadata', {}).get('product')]
     
     return answer, brand_names, products_referenced, 0, agent3_filters, agent3_products
+
+
 
 # ============ API ENDPOINTS (for future use) ============
 
