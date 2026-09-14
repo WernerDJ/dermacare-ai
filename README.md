@@ -69,7 +69,7 @@ DermaCare uses a **4-agent AI pipeline** to understand user skincare questions a
 - **Routine detection**: When user asks for "skincare routine", returns diverse product types (cleanser + serum + moisturizer + SPF)
 - **Combines**: Semantic similarity + metadata constraints
 
-### Agent 3.5: Ingredient Enricher ⭐ NEW
+### Agent 3.5: Ingredient Enricher 
 **Technology**: PubChem API + Chemical Synonym Lookup
 - **Detects chemical compounds** in user queries (e.g., "avobenzone", "salicylic acid")
 - **Looks up synonyms** via PubChem API (free, no auth required)
