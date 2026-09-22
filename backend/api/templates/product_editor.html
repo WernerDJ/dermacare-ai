@@ -137,6 +137,7 @@
                         <button type="button" class="btn btn-primary" onclick="saveProduct()">💾 Save</button>
                         <button type="button" class="btn btn-danger" onclick="deleteProduct()">🗑 Delete</button>
                         <button type="button" class="btn btn-warning ms-2" onclick="syncToChromaDB()">🔄 Sync to ChromaDB</button>
+                        <button type="button" class="btn btn-secondary ms-2" onclick="showProductList()">📋 View All Products</button>
                     </div>
                 </div>
 
@@ -367,6 +368,98 @@ function syncToChromaDB() {
         btn.innerHTML = originalText;
     });
 }
+
+function showProductList() {
+    const portfolioId = document.getElementById('portfolioId').value;
+    
+    if (!portfolioId) {
+        showMessage('❌ Please select a brand first', 'danger');
+        return;
+    }
+    
+    fetch('{% url "product_editor_api" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({action: 'get_all_products', portfolio_id: portfolioId})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            displayProductListModal(d.products, d.brand_name);
+        } else {
+            showMessage('❌ Error loading products: ' + d.error, 'danger');
+        }
+    })
+    .catch(err => showMessage('❌ Network error: ' + err, 'danger'));
+}
+
+function displayProductListModal(products, brandName) {
+    // Create modal HTML
+    const modalHtml = `
+        <div class="modal fade" id="productListModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">${brandName} - All Products (${products.length})</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" style="max-height: 600px; overflow-y: auto;">
+                        <ol style="line-height: 1.8;">
+                            ${products.map(p => `
+                                <li>
+                                    <strong>${p.name}</strong>
+                                    <div style="font-size: 0.9em; color: #666;">
+                                        ${p.category ? '<span class="badge bg-info">' + p.category + '</span>' : ''}
+                                        ${p.skin_type ? '<span class="badge bg-warning">' + p.skin_type + '</span>' : ''}
+                                    </div>
+                                </li>
+                            `).join('')}
+                        </ol>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary" onclick="copyProductList('${brandName}', ${JSON.stringify(products).replaceAll('"', '&quot;')})">
+                            📋 Copy List to Clipboard
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove old modal if exists
+    const oldModal = document.getElementById('productListModal');
+    if (oldModal) oldModal.remove();
+    
+    // Add new modal to DOM
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('productListModal'));
+    modal.show();
+}
+
+function copyProductList(brandName, products) {
+    let text = `${brandName} - All Products (${products.length})\n`;
+    text += '='.repeat(50) + '\n\n';
+    
+    products.forEach((p, idx) => {
+        text += `${idx + 1}. ${p.name}`;
+        if (p.category) text += ` [${p.category}]`;
+        if (p.skin_type) text += ` [${p.skin_type}]`;
+        text += '\n';
+    });
+    
+    navigator.clipboard.writeText(text).then(() => {
+        showMessage('✅ Product list copied to clipboard', 'success');
+    }).catch(() => {
+        showMessage('❌ Failed to copy', 'danger');
+    });
+}
+
 </script>
 
 <style>
