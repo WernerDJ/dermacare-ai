@@ -404,7 +404,35 @@ def product_editor_api(request, product_id=None):
             portfolio.total_products = count
             portfolio.save()
             return JsonResponse({'success': True, 'new_count': count})
-            
+        
+        elif action == 'get_all_products':
+            portfolio_id = data.get('portfolio_id')
+            try:
+                portfolio = BrandPortfolio.objects.get(id=portfolio_id)
+                products = Product.objects.filter(portfolio=portfolio).order_by('name')
+                
+                products_data = [
+                    {
+                        'id': p.id,
+                        'name': p.name,
+                        'category': p.category or '',
+                        'skin_type': p.skin_type or '',
+                    }
+                    for p in products
+                ]
+                
+                return JsonResponse({
+                    'success': True,
+                    'products': products_data,
+                    'brand_name': portfolio.name,
+                    'count': len(products_data)
+                })
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'error': str(e)
+                }, status=400)
+
         elif action == 'sync_chroma':
             from .agents import Agent2Vectorizer
             import chromadb
